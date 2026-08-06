@@ -1,21 +1,20 @@
 import { z } from "zod";
 import {
   emailSchema,
-  passwordSchema,
   phoneSchema,
+  passwordSchema,
   uuidSchema,
-  otpSchema,
   userRoleSchema,
 } from "../middlewares/validation.middleware";
 
 // ============================================================
-// AUTH SCHEMAS
+// USER SCHEMAS
 // ============================================================
 
 /**
- * Registration request schema
+ * User registration schema (full)
  */
-export const registerSchema = z.object({
+export const userRegisterSchema = z.object({
   email: emailSchema,
   phone: phoneSchema,
   password: passwordSchema,
@@ -27,67 +26,42 @@ export const registerSchema = z.object({
   role: userRoleSchema.optional().default("CUSTOMER"),
 });
 
-export type RegisterInput = z.infer<typeof registerSchema>;
+export type UserRegisterInput = z.infer<typeof userRegisterSchema>;
 
 /**
- * Login request schema
+ * User registration schema (public)
  */
-export const loginSchema = z.object({
+export const publicRegisterSchema = z.object({
   email: emailSchema,
-  password: z.string().min(1, "Password is required"),
-});
-
-export type LoginInput = z.infer<typeof loginSchema>;
-
-/**
- * Refresh token request schema
- */
-export const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1, "Refresh token is required"),
-});
-
-export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
-
-/**
- * OTP send request schema
- */
-export const sendOTPSchema = z.object({
   phone: phoneSchema,
+  password: passwordSchema,
+  fullName: z
+    .string()
+    .min(2, "Full name must be at least 2 characters")
+    .max(100, "Full name must not exceed 100 characters"),
 });
 
-export type SendOTPInput = z.infer<typeof sendOTPSchema>;
+export type PublicRegisterInput = z.infer<typeof publicRegisterSchema>;
 
 /**
- * OTP verify request schema
+ * Update profile schema
  */
-export const verifyOTPSchema = z.object({
-  phone: phoneSchema,
-  otp: otpSchema,
+export const updateProfileSchema = z.object({
+  fullName: z
+    .string()
+    .min(2, "Full name must be at least 2 characters")
+    .max(100, "Full name must not exceed 100 characters")
+    .regex(/^[a-zA-Z\s]+$/, "Full name can only contain letters and spaces")
+    .optional(),
+  phone: phoneSchema.optional(),
+  bio: z.string().max(500, "Bio must not exceed 500 characters").optional(),
+  profileImage: z.string().url("Profile image must be a valid URL").optional(),
 });
 
-export type VerifyOTPInput = z.infer<typeof verifyOTPSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 /**
- * Forgot password request schema
- */
-export const forgotPasswordSchema = z.object({
-  email: emailSchema,
-});
-
-export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
-
-/**
- * Reset password request schema
- */
-export const resetPasswordSchema = z.object({
-  token: z.string().min(1, "Reset token is required"),
-  newPassword: passwordSchema,
-});
-
-export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
-
-/**
- * Change password request schema (authenticated user)
+ * Change password schema
  */
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -97,44 +71,124 @@ export const changePasswordSchema = z.object({
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 /**
- * Email verification request schema
+ * Update profile image schema
  */
-export const verifyEmailSchema = z.object({
-  token: z.string().min(1, "Verification token is required"),
+export const updateProfileImageSchema = z.object({
+  image: z
+    .string()
+    .url("Image must be a valid URL")
+    .min(1, "Image URL is required"),
 });
 
-export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type UpdateProfileImageInput = z.infer<typeof updateProfileImageSchema>;
 
 /**
- * Resend verification email request schema
+ * User ID param schema
  */
-export const resendVerificationSchema = z.object({
+export const userIdParamSchema = z.object({
+  userId: uuidSchema,
+});
+
+export type UserIdParamInput = z.infer<typeof userIdParamSchema>;
+
+/**
+ * User filter query schema
+ */
+export const userFilterSchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(10),
+  search: z.string().optional(),
+  role: userRoleSchema.optional(),
+  isActive: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((val) => val === "true"),
+  isVerified: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((val) => val === "true"),
+  sortBy: z
+    .enum(["createdAt", "fullName", "email"])
+    .optional()
+    .default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
+});
+
+export type UserFilterInput = z.infer<typeof userFilterSchema>;
+
+/**
+ * Admin create user schema
+ */
+export const adminCreateUserSchema = z.object({
   email: emailSchema,
+  phone: phoneSchema,
+  password: passwordSchema,
+  fullName: z
+    .string()
+    .min(2, "Full name must be at least 2 characters")
+    .max(100, "Full name must not exceed 100 characters"),
+  role: userRoleSchema,
+  isEmailVerified: z.boolean().optional().default(false),
+  isPhoneVerified: z.boolean().optional().default(false),
+  isActive: z.boolean().optional().default(true),
 });
 
-export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
+export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
 
 /**
- * Logout request schema (optional, just uses token)
+ * Admin update user schema
  */
-export const logoutSchema = z.object({});
+export const adminUpdateUserSchema = z.object({
+  fullName: z
+    .string()
+    .min(2, "Full name must be at least 2 characters")
+    .max(100, "Full name must not exceed 100 characters")
+    .optional(),
+  phone: phoneSchema.optional(),
+  email: emailSchema.optional(),
+  role: userRoleSchema.optional(),
+  isEmailVerified: z.boolean().optional(),
+  isPhoneVerified: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  bio: z.string().max(500).optional(),
+});
 
-export type LogoutInput = z.infer<typeof logoutSchema>;
+export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
+
+/**
+ * User response schema (for API responses)
+ */
+export const userResponseSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  phone: z.string(),
+  fullName: z.string(),
+  role: z.enum(["CUSTOMER", "PROVIDER", "ADMIN"]),
+  profileImage: z.string().nullable(),
+  bio: z.string().nullable(),
+  isEmailVerified: z.boolean(),
+  isPhoneVerified: z.boolean(),
+  isActive: z.boolean(),
+  lastLoginAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export type UserResponse = z.infer<typeof userResponseSchema>;
 
 // ============================================================
 // EXPORTS
 // ============================================================
 
 export default {
-  registerSchema,
-  loginSchema,
-  refreshTokenSchema,
-  sendOTPSchema,
-  verifyOTPSchema,
-  forgotPasswordSchema,
-  resetPasswordSchema,
+  userRegisterSchema,
+  publicRegisterSchema,
+  updateProfileSchema,
   changePasswordSchema,
-  verifyEmailSchema,
-  resendVerificationSchema,
-  logoutSchema,
+  updateProfileImageSchema,
+  userIdParamSchema,
+  userFilterSchema,
+  adminCreateUserSchema,
+  adminUpdateUserSchema,
+  userResponseSchema,
 };
