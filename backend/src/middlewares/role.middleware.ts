@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "./auth.middleware";
 import { sendForbidden, sendUnauthorized } from "../utils/response";
-import { USER_ROLES } from "../utils/constants";
+import prisma from "../config/database";
 import logger from "../utils/logger";
 
 // ============================================================
@@ -80,41 +80,6 @@ export function requireAnyRole(...roles: UserRole[]) {
   };
 }
 
-/**
- * Require all specified roles
- */
-export function requireAllRoles(...roles: UserRole[]) {
-  return (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction,
-  ): void | Response => {
-    if (!req.user) {
-      return sendUnauthorized(res, "Authentication required", [
-        "You must be logged in to access this resource",
-      ]);
-    }
-
-    // Admin has access to everything
-    if (req.user.role === "ADMIN") {
-      return next();
-    }
-
-    const hasAllRoles = roles.every((role) => req.user?.role === role);
-
-    if (!hasAllRoles) {
-      logger.warn(
-        `Access denied: User ${req.user.id} with role ${req.user.role} does not have all required roles: ${roles.join(", ")}`,
-      );
-      return sendForbidden(res, "Insufficient permissions", [
-        `Access requires all of: ${roles.join(", ")}`,
-      ]);
-    }
-
-    next();
-  };
-}
-
 // ============================================================
 // CUSTOMER ROLE MIDDLEWARES
 // ============================================================
@@ -167,11 +132,110 @@ export function requireAdmin() {
 // ============================================================
 
 /**
- * Check if the authenticated user owns the resource
- * @param getResourceOwnerId - Function that returns the owner ID from the request
+ * Check if user owns the booking
+ */
+export async function isBookingOwner(
+  req: Request,
+  userId: string,
+): Promise<boolean> {
+  const bookingId = req.params.id || req.params.bookingId;
+  if (!bookingId) {
+    return false;
+  }
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { customerId: true },
+  });
+
+  if (!booking) {
+    return false;
+  }
+
+  return booking.customerId === userId;
+}
+
+/**
+ * Check if user owns the provider profile
+ */
+export async function isProviderOwner(
+  req: Request,
+  userId: string,
+): Promise<boolean> {
+  const providerId = req.params.id || req.params.providerId;
+  if (!providerId) {
+    return false;
+  }
+
+  const provider = await prisma.providerProfile.findUnique({
+    where: { id: providerId },
+    select: { userId: true },
+  });
+
+  if (!provider) {
+    return false;
+  }
+
+  return provider.userId === userId;
+}
+
+/**
+ * Check if user owns the service
+ */
+export async function isServiceOwner(
+  req: Request,
+  userId: string,
+): Promise<boolean> {
+  const serviceId = req.params.id || req.params.serviceId;
+  if (!serviceId) {
+    return false;
+  }
+
+  const service = await prisma.service.findUnique({
+    where: { id: serviceId },
+    include: {
+      provider: {
+        select: { userId: true },
+      },
+    },
+  });
+
+  if (!service || !service.provider) {
+    return false;
+  }
+
+  return service.provider.userId === userId;
+}
+
+/**
+ * Check if user owns the review
+ */
+export async function isReviewOwner(
+  req: Request,
+  userId: string,
+): Promise<boolean> {
+  const reviewId = req.params.id || req.params.reviewId;
+  if (!reviewId) {
+    return false;
+  }
+
+  const review = await prisma.review.findUnique({
+    where: { id: reviewId },
+    select: { reviewerId: true },
+  });
+
+  if (!review) {
+    return false;
+  }
+
+  return review.reviewerId === userId;
+}
+
+/**
+ * Generic ownership middleware
  */
 export function requireOwnership(
-  getResourceOwnerId: (req: Request) => Promise<string | null>,
+  checkFn: (req: Request, userId: string) => Promise<boolean>,
 ) {
   return async (
     req: AuthenticatedRequest,
@@ -190,17 +254,11 @@ export function requireOwnership(
     }
 
     try {
-      const ownerId = await getResourceOwnerId(req);
+      const isOwner = await checkFn(req, req.user.id);
 
-      if (!ownerId) {
-        return sendForbidden(res, "Resource not found", [
-          "The requested resource does not exist",
-        ]);
-      }
-
-      if (req.user.id !== ownerId) {
+      if (!isOwner) {
         logger.warn(
-          `Ownership denied: User ${req.user.id} attempted to access resource owned by ${ownerId}`,
+          `Ownership denied: User ${req.user.id} attempted to access resource they do not own`,
         );
         return sendForbidden(res, "Access denied", [
           "You do not have permission to access this resource",
@@ -217,12 +275,40 @@ export function requireOwnership(
   };
 }
 
+/**
+ * Require booking ownership
+ */
+export function requireBookingOwner() {
+  return requireOwnership(isBookingOwner);
+}
+
+/**
+ * Require provider ownership
+ */
+export function requireProviderOwner() {
+  return requireOwnership(isProviderOwner);
+}
+
+/**
+ * Require service ownership
+ */
+export function requireServiceOwner() {
+  return requireOwnership(isServiceOwner);
+}
+
+/**
+ * Require review ownership
+ */
+export function requireReviewOwner() {
+  return requireOwnership(isReviewOwner);
+}
+
 // ============================================================
 // PERMISSION-BASED MIDDLEWARES
 // ============================================================
 
 /**
- * Define role permissions
+ * Role permissions matrix for the application
  */
 export const permissions: Record<UserRole, Permission[]> = {
   CUSTOMER: [
@@ -237,6 +323,7 @@ export const permissions: Record<UserRole, Permission[]> = {
     { resource: "review", action: "update" },
     { resource: "provider", action: "read" },
     { resource: "category", action: "read" },
+    { resource: "search", action: "read" },
   ],
   PROVIDER: [
     { resource: "profile", action: "read" },
@@ -252,6 +339,7 @@ export const permissions: Record<UserRole, Permission[]> = {
     { resource: "review", action: "read" },
     { resource: "review", action: "respond" },
     { resource: "earnings", action: "read" },
+    { resource: "dashboard", action: "read" },
   ],
   ADMIN: [{ resource: "*", action: "manage" }],
 };
@@ -362,21 +450,87 @@ export function requireSelfUser() {
 }
 
 // ============================================================
+// PROVIDER VERIFICATION CHECK
+// ============================================================
+
+/**
+ * Check if provider is verified
+ */
+export function requireVerifiedProvider() {
+  return async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void | Response> => {
+    if (!req.user) {
+      return sendUnauthorized(res, "Authentication required", [
+        "You must be logged in to access this resource",
+      ]);
+    }
+
+    // Admin bypasses verification check
+    if (req.user.role === "ADMIN") {
+      return next();
+    }
+
+    if (req.user.role !== "PROVIDER") {
+      return sendForbidden(res, "Provider role required", [
+        "This resource is only available to providers",
+      ]);
+    }
+
+    try {
+      const provider = await prisma.providerProfile.findUnique({
+        where: { userId: req.user.id },
+        select: { isVerified: true },
+      });
+
+      if (!provider) {
+        return sendForbidden(res, "Provider profile not found", [
+          "You must register as a provider first",
+        ]);
+      }
+
+      if (!provider.isVerified) {
+        return sendForbidden(res, "Provider verification required", [
+          "Your provider account must be verified to access this resource",
+        ]);
+      }
+
+      next();
+    } catch (error) {
+      logger.error("Provider verification check failed:", error);
+      return sendForbidden(res, "Access denied", [
+        "Unable to verify provider status",
+      ]);
+    }
+  };
+}
+
+// ============================================================
 // EXPORTS
 // ============================================================
 
 export default {
   requireRole,
   requireAnyRole,
-  requireAllRoles,
   requireCustomer,
   requireCustomerOrAdmin,
   requireProvider,
   requireProviderOrAdmin,
   requireAdmin,
   requireOwnership,
+  requireBookingOwner,
+  requireProviderOwner,
+  requireServiceOwner,
+  requireReviewOwner,
   requirePermission,
   requireSelfUser,
+  requireVerifiedProvider,
   hasPermission,
   permissions,
+  isBookingOwner,
+  isProviderOwner,
+  isServiceOwner,
+  isReviewOwner,
 };
