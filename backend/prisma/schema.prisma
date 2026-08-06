@@ -1,0 +1,537 @@
+// ============================================================
+// LOCAL SERVICE PROVIDER MARKETPLACE - DATABASE SCHEMA
+// Version: 1.0.0
+// Database: PostgreSQL
+// ORM: Prisma
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum PriceType {
+  FIXED
+  HOURLY
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum AvailabilityDay {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+// ============================================================
+// USER TABLE
+// ============================================================
+
+model User {
+  id              String          @id @default(uuid())
+  email           String          @unique
+  phone           String          @unique
+  passwordHash    String
+  fullName        String
+  role            UserRole        @default(CUSTOMER)
+  isEmailVerified Boolean         @default(false)
+  isPhoneVerified Boolean         @default(false)
+  profileImage    String?
+  bio             String?
+  isActive        Boolean         @default(true)
+  lastLoginAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  providerProfile ProviderProfile?
+  bookingsAsCustomer Booking[]    @relation("CustomerBookings")
+  reviewsGiven    Review[]        @relation("Reviewer")
+  notifications   Notification[]
+  disputes        Dispute[]       @relation("UserDisputes")
+  auditLogs       AuditLog[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@map("users")
+}
+
+// ============================================================
+// PROVIDER PROFILE TABLE
+// ============================================================
+
+model ProviderProfile {
+  id                String             @id @default(uuid())
+  userId            String             @unique
+  user              User               @relation(fields: [userId], references: [id])
+  businessName      String
+  businessLogo      String?
+  description       String             @db.Text
+  category          String
+  subCategory       String?
+  yearsExperience   Int                @default(0)
+  hourlyRate        Float?
+  isAvailable       Boolean            @default(true)
+  verificationStatus VerificationStatus @default(PENDING)
+  verificationDate  DateTime?
+  verificationNotes String?
+  isVerified        Boolean            @default(false)
+  averageRating     Float              @default(0)
+  totalReviews      Int                @default(0)
+  locationLat       Float
+  locationLng       Float
+  address           String             @db.Text
+  city              String
+  subCity           String?
+  workingHours      Json?
+  completedJobs     Int                @default(0)
+  responseTime      Int?               // Average response time in minutes
+  isFeatured        Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  // Relations
+  services          Service[]
+  bookings          Booking[]
+  reviews           Review[]
+  availability      Availability[]
+  providerDocuments ProviderDocument[]
+  providerEarnings  ProviderEarning[]
+
+  @@index([category])
+  @@index([isAvailable])
+  @@index([averageRating])
+  @@index([isVerified])
+  @@index([locationLat, locationLng])
+  @@map("provider_profiles")
+}
+
+// ============================================================
+// AVAILABILITY TABLE
+// ============================================================
+
+model Availability {
+  id              String         @id @default(uuid())
+  providerId      String
+  provider        ProviderProfile @relation(fields: [providerId], references: [id])
+  day             AvailabilityDay
+  startTime       String         // Format: "09:00"
+  endTime         String         // Format: "17:00"
+  isAvailable     Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([providerId, day])
+  @@map("availabilities")
+}
+
+// ============================================================
+// SERVICE TABLE
+// ============================================================
+
+model Service {
+  id                        String         @id @default(uuid())
+  providerId                String
+  provider                  ProviderProfile @relation(fields: [providerId], references: [id])
+  title                     String
+  description               String         @db.Text
+  priceType                 PriceType      @default(FIXED)
+  price                     Float
+  discountPrice             Float?
+  estimatedDurationMinutes  Int?
+  isActive                  Boolean        @default(true)
+  images                    String[]       @db.Text
+  category                  String
+  subCategory               String?
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+
+  // Relations
+  bookings                  Booking[]
+
+  @@index([providerId])
+  @@index([category])
+  @@index([isActive])
+  @@map("services")
+}
+
+// ============================================================
+// BOOKING TABLE
+// ============================================================
+
+model Booking {
+  id                String         @id @default(uuid())
+  bookingNumber     String         @unique
+  customerId        String
+  customer          User           @relation("CustomerBookings", fields: [customerId], references: [id])
+  providerId        String
+  provider          ProviderProfile @relation(fields: [providerId], references: [id])
+  serviceId         String?
+  service           Service?       @relation(fields: [serviceId], references: [id])
+
+  status            BookingStatus  @default(PENDING)
+  scheduledDate     DateTime
+  estimatedEndDate  DateTime?
+  address           String         @db.Text
+  specialNotes      String?        @db.Text
+  totalPrice        Float
+  depositAmount     Float?         @default(0)
+
+  // Timestamps
+  confirmedAt       DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  cancellationReason String?
+  cancelledBy       String?        // userId who cancelled
+
+  // Tracking
+  providerLat       Float?         // Real-time tracking
+  providerLng       Float?
+  customerLat       Float?
+  customerLng       Float?
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Relations
+  review            Review?
+  payment           Payment?
+  dispute           Dispute?
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([bookingNumber])
+  @@map("bookings")
+}
+
+// ============================================================
+// REVIEW TABLE
+// ============================================================
+
+model Review {
+  id              String   @id @default(uuid())
+  bookingId       String   @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id])
+  reviewerId      String
+  reviewer        User     @relation("Reviewer", fields: [reviewerId], references: [id])
+  providerId      String
+  provider        ProviderProfile @relation(fields: [providerId], references: [id])
+  rating          Int      // 1-5
+  comment         String   @db.Text
+  images          String[] @db.Text
+  isPublic        Boolean  @default(true)
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  reviewResponses ReviewResponse[]
+
+  @@index([providerId])
+  @@index([rating])
+  @@index([createdAt])
+  @@map("reviews")
+}
+
+// ============================================================
+// REVIEW RESPONSE TABLE
+// ============================================================
+
+model ReviewResponse {
+  id          String   @id @default(uuid())
+  reviewId    String
+  review      Review   @relation(fields: [reviewId], references: [id])
+  providerId  String
+  provider    ProviderProfile @relation(fields: [providerId], references: [id])
+  response    String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("review_responses")
+}
+
+// ============================================================
+// CATEGORY TABLE
+// ============================================================
+
+model Category {
+  id              String          @id @default(uuid())
+  name            String          @unique
+  nameAm          String?         // Amharic name
+  slug            String          @unique
+  description     String?         @db.Text
+  icon            String?         // Icon identifier
+  image           String?
+  parentId        String?
+  parent          Category?       @relation("CategoryParent", fields: [parentId], references: [id])
+  children        Category[]      @relation("CategoryParent")
+  isActive        Boolean         @default(true)
+  displayOrder    Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([parentId])
+  @@index([isActive])
+  @@index([slug])
+  @@map("categories")
+}
+
+// ============================================================
+// NOTIFICATION TABLE
+// ============================================================
+
+model Notification {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+  type            NotificationType
+  title           String
+  message         String            @db.Text
+  data            Json?
+  status          NotificationStatus @default(PENDING)
+  sentAt          DateTime?
+  readAt          DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================================
+// PAYMENT TABLE
+// ============================================================
+
+model Payment {
+  id              String          @id @default(uuid())
+  bookingId       String          @unique
+  booking         Booking         @relation(fields: [bookingId], references: [id])
+  customerId      String
+  providerId      String
+  amount          Float
+  paymentMethod   String          // "CASH", "TELEBIRR", "CHAPA"
+  transactionId   String?
+  reference       String?
+  status          PaymentStatus   @default(PENDING)
+  paidAt          DateTime?
+  refundedAt      DateTime?
+  refundReason    String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([bookingId])
+  @@index([status])
+  @@index([transactionId])
+  @@map("payments")
+}
+
+// ============================================================
+// DISPUTE TABLE
+// ============================================================
+
+model Dispute {
+  id              String          @id @default(uuid())
+  bookingId       String          @unique
+  booking         Booking         @relation(fields: [bookingId], references: [id])
+  customerId      String
+  providerId      String
+  raisedBy        String          // Customer or Provider
+  reason          String          @db.Text
+  description     String          @db.Text
+  status          DisputeStatus   @default(OPEN)
+  adminNotes      String?         @db.Text
+  resolution      String?         @db.Text
+  resolvedAt      DateTime?
+  resolvedBy      String?         // Admin userId
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  disputeMessages DisputeMessage[]
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("disputes")
+}
+
+// ============================================================
+// DISPUTE MESSAGE TABLE
+// ============================================================
+
+model DisputeMessage {
+  id              String    @id @default(uuid())
+  disputeId       String
+  dispute         Dispute   @relation(fields: [disputeId], references: [id])
+  senderId        String
+  senderRole      UserRole
+  message         String    @db.Text
+  attachments     String[]  @db.Text
+  isRead          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([disputeId])
+  @@index([createdAt])
+  @@map("dispute_messages")
+}
+
+// ============================================================
+// PROVIDER DOCUMENT TABLE
+// ============================================================
+
+model ProviderDocument {
+  id              String            @id @default(uuid())
+  providerId      String
+  provider        ProviderProfile   @relation(fields: [providerId], references: [id])
+  documentType    String            // "ID", "LICENSE", "CERTIFICATE"
+  documentUrl     String            @db.Text
+  verificationStatus VerificationStatus @default(PENDING)
+  verifiedAt      DateTime?
+  verifiedBy      String?
+  expiryDate      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([providerId])
+  @@map("provider_documents")
+}
+
+// ============================================================
+// PROVIDER EARNING TABLE
+// ============================================================
+
+model ProviderEarning {
+  id              String    @id @default(uuid())
+  providerId      String
+  provider        ProviderProfile @relation(fields: [providerId], references: [id])
+  bookingId       String
+  amount          Float
+  commission      Float     // Platform commission
+  netAmount       Float
+  status          String    // "PENDING", "PAID", "HOLD"
+  paidAt          DateTime?
+  reference       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([providerId])
+  @@index([status])
+  @@map("provider_earnings")
+}
+
+// ============================================================
+// AUDIT LOG TABLE
+// ============================================================
+
+model AuditLog {
+  id              String    @id @default(uuid())
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id])
+  action          String
+  entity          String
+  entityId        String?
+  changes         Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// SYSTEM SETTING TABLE
+// ============================================================
+
+model SystemSetting {
+  id              String    @id @default(uuid())
+  key             String    @unique
+  value           Json
+  description     String?
+  isPublic        Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("system_settings")
+}
+
+// ============================================================
+// SAVED PROVIDER TABLE (Customer Favorites)
+// ============================================================
+
+model SavedProvider {
+  id              String    @id @default(uuid())
+  customerId      String
+  customer        User      @relation(fields: [customerId], references: [id])
+  providerId      String
+  provider        ProviderProfile @relation(fields: [providerId], references: [id])
+  createdAt       DateTime  @default(now())
+
+  @@unique([customerId, providerId])
+  @@map("saved_providers")
+}  
