@@ -1,6 +1,6 @@
 import rateLimit, { RateLimitRequestHandler } from "express-rate-limit";
+import { Request, Response } from "express";
 import env from "./env";
-import { sendError } from "../utils/response";
 
 // ============================================================
 // RATE LIMIT CONFIGURATION
@@ -18,18 +18,33 @@ export function createRateLimiter(
   return rateLimit({
     windowMs,
     max,
-    message: {
-      success: false,
-      message,
-      errors: ["Rate limit exceeded"],
-      statusCode: 429,
-      timestamp: new Date().toISOString(),
-    },
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests,
-    handler: (req, res, next, options) => {
-      sendError(res, message, 429, ["Too many requests from this IP"]);
+    handler: (req: Request, res: Response) => {
+      res.status(429).json({
+        success: false,
+        message: message,
+        errors: [
+          "Rate limit exceeded. Too many requests from this IP address.",
+        ],
+        statusCode: 429,
+        timestamp: new Date().toISOString(),
+        path: req.path,
+      });
+    },
+    keyGenerator: (req: Request) => {
+      // Use IP address as the key for rate limiting
+      const ip =
+        req.ip || (req.headers["x-forwarded-for"] as string) || "unknown";
+      return typeof ip === "string" ? ip : ip[0] || "unknown";
+    },
+    skip: (req: Request) => {
+      // Skip rate limiting for health check endpoints
+      if (req.path === "/health" || req.path === "/") {
+        return true;
+      }
+      return false;
     },
   });
 }
@@ -38,9 +53,9 @@ export function createRateLimiter(
  * Strict rate limiter for authentication endpoints
  * 5 attempts per 15 minutes
  */
-export const authRateLimiter = createRateLimiter(
-  15 * 60 * 1000, // 15 minutes
-  5, // 5 attempts
+export const authRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  15 * 60 * 1000,
+  5,
   "Too many authentication attempts. Please try again after 15 minutes.",
 );
 
@@ -48,9 +63,9 @@ export const authRateLimiter = createRateLimiter(
  * Standard rate limiter for API endpoints
  * 100 requests per 15 minutes
  */
-export const standardRateLimiter = createRateLimiter(
-  15 * 60 * 1000, // 15 minutes
-  100, // 100 requests
+export const standardRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  15 * 60 * 1000,
+  100,
   "Too many requests. Please slow down and try again later.",
 );
 
@@ -58,9 +73,9 @@ export const standardRateLimiter = createRateLimiter(
  * Strict rate limiter for sensitive operations
  * 20 requests per hour
  */
-export const strictRateLimiter = createRateLimiter(
-  60 * 60 * 1000, // 1 hour
-  20, // 20 requests
+export const strictRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  60 * 60 * 1000,
+  20,
   "Rate limit exceeded for this operation. Please try again after an hour.",
 );
 
@@ -68,9 +83,9 @@ export const strictRateLimiter = createRateLimiter(
  * Relaxed rate limiter for read-only endpoints
  * 500 requests per 15 minutes
  */
-export const relaxedRateLimiter = createRateLimiter(
-  15 * 60 * 1000, // 15 minutes
-  500, // 500 requests
+export const relaxedRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  15 * 60 * 1000,
+  500,
   "Too many requests. Please try again later.",
 );
 
@@ -78,10 +93,61 @@ export const relaxedRateLimiter = createRateLimiter(
  * Login rate limiter with stricter rules
  * 10 attempts per 30 minutes
  */
-export const loginRateLimiter = createRateLimiter(
-  30 * 60 * 1000, // 30 minutes
-  10, // 10 attempts
+export const loginRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  30 * 60 * 1000,
+  10,
   "Too many login attempts. Please try again after 30 minutes.",
+);
+
+/**
+ * OTP rate limiter for verification codes
+ * 3 attempts per 10 minutes
+ */
+export const otpRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  10 * 60 * 1000,
+  3,
+  "Too many OTP attempts. Please try again after 10 minutes.",
+);
+
+/**
+ * Booking creation rate limiter
+ * 10 bookings per 5 minutes
+ */
+export const bookingRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  5 * 60 * 1000,
+  10,
+  "Too many booking requests. Please slow down.",
+);
+
+/**
+ * Provider registration rate limiter
+ * 3 registrations per 24 hours from same IP
+ */
+export const providerRegistrationRateLimiter: RateLimitRequestHandler =
+  createRateLimiter(
+    24 * 60 * 60 * 1000,
+    3,
+    "Too many provider registration attempts from this IP. Please try again tomorrow.",
+  );
+
+/**
+ * Review submission rate limiter
+ * 15 reviews per 15 minutes
+ */
+export const reviewRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  15 * 60 * 1000,
+  15,
+  "Too many reviews submitted. Please slow down.",
+);
+
+/**
+ * File upload rate limiter
+ * 10 uploads per 5 minutes
+ */
+export const uploadRateLimiter: RateLimitRequestHandler = createRateLimiter(
+  5 * 60 * 1000,
+  10,
+  "Too many file uploads. Please try again later.",
 );
 
 // ============================================================
@@ -95,4 +161,9 @@ export default {
   strictRateLimiter,
   relaxedRateLimiter,
   loginRateLimiter,
+  otpRateLimiter,
+  bookingRateLimiter,
+  providerRegistrationRateLimiter,
+  reviewRateLimiter,
+  uploadRateLimiter,
 };
