@@ -32,6 +32,7 @@ import {
   providerFilterSchema,
 } from "../schemas/provider.schema";
 import { bookingFilterSchema } from "../schemas/booking.schema";
+import { USER_ROLES } from "../utils/constants";
 import logger from "../utils/logger";
 
 // ============================================================
