@@ -24,7 +24,7 @@ import { USER_ROLES } from "../utils/constants";
 import logger from "../utils/logger";
 
 // ============================================================
-// SCHEMAS (inline for completeness)
+// INLINE ZOD SCHEMAS FOR VALIDATION
 // ============================================================
 
 const paymentDataSchema = z.object({
@@ -227,8 +227,11 @@ export const getPaymentByIdController = catchAsync(
       return;
     }
 
-    // Check authorization: only customer, provider, or admin
+    // Get booking to check authorization
+    const { findBookingById } =
+      await import("../repositories/booking.repository");
     const booking = await findBookingById(payment.bookingId);
+
     if (!booking) {
       sendError(res, "Booking not found", 404);
       return;
@@ -274,7 +277,10 @@ export const getPaymentByBookingIdController = catchAsync(
     }
 
     // Check authorization
+    const { findBookingById } =
+      await import("../repositories/booking.repository");
     const booking = await findBookingById(payment.bookingId);
+
     if (!booking) {
       sendError(res, "Booking not found", 404);
       return;
@@ -601,7 +607,10 @@ export const checkBookingPaymentExistsController = catchAsync(
     }
 
     // Check authorization: only customer, provider, or admin
+    const { findBookingById } =
+      await import("../repositories/booking.repository");
     const booking = await findBookingById(validatedParams.bookingId);
+
     if (!booking) {
       sendError(res, "Booking not found", 404);
       return;
