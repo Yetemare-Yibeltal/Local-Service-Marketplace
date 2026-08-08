@@ -407,6 +407,12 @@ export const confirmBookingController = catchAsync(
       return;
     }
 
+    // Only provider or admin can confirm
+    if (userRole !== "PROVIDER" && userRole !== "ADMIN") {
+      sendError(res, "Only providers can confirm bookings", 403);
+      return;
+    }
+
     // Get provider profile for this user
     const { findProviderByUserId } =
       await import("../repositories/provider.repository");
@@ -439,9 +445,16 @@ export const startBookingController = catchAsync(
     const validatedParams = bookingIdParamSchema.parse(req.params);
 
     const userId = (req as any).user?.id;
+    const userRole = (req as any).user?.role;
 
     if (!userId) {
       sendError(res, "User not authenticated", 401);
+      return;
+    }
+
+    // Only provider or admin can start
+    if (userRole !== "PROVIDER" && userRole !== "ADMIN") {
+      sendError(res, "Only providers can start bookings", 403);
       return;
     }
 
@@ -474,9 +487,16 @@ export const completeBookingController = catchAsync(
     const validatedParams = bookingIdParamSchema.parse(req.params);
 
     const userId = (req as any).user?.id;
+    const userRole = (req as any).user?.role;
 
     if (!userId) {
       sendError(res, "User not authenticated", 401);
+      return;
+    }
+
+    // Only provider or admin can complete
+    if (userRole !== "PROVIDER" && userRole !== "ADMIN") {
+      sendError(res, "Only providers can complete bookings", 403);
       return;
     }
 
@@ -576,6 +596,188 @@ export const checkBookingExistsController = catchAsync(
   },
 );
 
+/**
+ * Check if customer owns booking
+ * @route GET /api/v1/bookings/:id/customer-owner
+ * @description Checks if the authenticated customer owns the booking
+ * @header Authorization: Bearer {accessToken}
+ * @param {id} - Booking ID
+ * @returns { isOwner: boolean } with 200 status
+ */
+export const checkCustomerBookingOwner = catchAsync(
+  async (req: Request, res: Response): Promise<void> => {
+    const validatedParams = bookingIdParamSchema.parse(req.params);
+
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      sendError(res, "User not authenticated", 401);
+      return;
+    }
+
+    const isOwner = await checkBookingCustomer(validatedParams.id, userId);
+
+    sendSuccess(res, { isOwner }, "Booking ownership check completed");
+  },
+);
+
+/**
+ * Check if provider owns booking
+ * @route GET /api/v1/bookings/:id/provider-owner
+ * @description Checks if the authenticated provider owns the booking
+ * @header Authorization: Bearer {accessToken}
+ * @param {id} - Booking ID
+ * @returns { isOwner: boolean } with 200 status
+ */
+export const checkProviderBookingOwner = catchAsync(
+  async (req: Request, res: Response): Promise<void> => {
+    const validatedParams = bookingIdParamSchema.parse(req.params);
+
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      sendError(res, "User not authenticated", 401);
+      return;
+    }
+
+    // Get provider profile for this user
+    const { findProviderByUserId } =
+      await import("../repositories/provider.repository");
+    const provider = await findProviderByUserId(userId);
+
+    if (!provider) {
+      sendSuccess(res, { isOwner: false }, "Provider not found");
+      return;
+    }
+
+    const isOwner = await checkBookingProvider(validatedParams.id, provider.id);
+
+    sendSuccess(res, { isOwner }, "Booking ownership check completed");
+  },
+);
+
+/**
+ * Get booking by ID with full details (customer view)
+ * @route GET /api/v1/bookings/:id/customer-view
+ * @description Retrieves a specific booking with customer view (includes provider details)
+ * @header Authorization: Bearer {accessToken}
+ * @param {id} - Booking ID
+ * @returns { booking } with 200 status
+ */
+export const getCustomerBookingView = catchAsync(
+  async (req: Request, res: Response): Promise<void> => {
+    const validatedParams = bookingIdParamSchema.parse(req.params);
+
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      sendError(res, "User not authenticated", 401);
+      return;
+    }
+
+    const booking = await getBookingById(validatedParams.id);
+
+    if (!booking) {
+      sendError(res, "Booking not found", 404);
+      return;
+    }
+
+    // Check permission: only customer or admin can view customer view
+    if (booking.customerId !== userId && (req as any).user?.role !== "ADMIN") {
+      sendError(res, "You do not have permission to view this booking", 403);
+      return;
+    }
+
+    // Get provider details
+    const { findProviderById } =
+      await import("../repositories/provider.repository");
+    const provider = await findProviderById(booking.providerId);
+
+    const customerView = {
+      ...booking,
+      providerDetails: provider
+        ? {
+            id: provider.id,
+            businessName: provider.businessName,
+            businessLogo: provider.businessLogo,
+            category: provider.category,
+            averageRating: provider.averageRating,
+            totalReviews: provider.totalReviews,
+            isVerified: provider.isVerified,
+          }
+        : null,
+    };
+
+    sendSuccess(res, customerView, "Booking retrieved successfully");
+  },
+);
+
+/**
+ * Get booking by ID with full details (provider view)
+ * @route GET /api/v1/bookings/:id/provider-view
+ * @description Retrieves a specific booking with provider view (includes customer details)
+ * @header Authorization: Bearer {accessToken}
+ * @param {id} - Booking ID
+ * @returns { booking } with 200 status
+ */
+export const getProviderBookingView = catchAsync(
+  async (req: Request, res: Response): Promise<void> => {
+    const validatedParams = bookingIdParamSchema.parse(req.params);
+
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      sendError(res, "User not authenticated", 401);
+      return;
+    }
+
+    const booking = await getBookingById(validatedParams.id);
+
+    if (!booking) {
+      sendError(res, "Booking not found", 404);
+      return;
+    }
+
+    // Get provider profile for this user
+    const { findProviderByUserId } =
+      await import("../repositories/provider.repository");
+    const provider = await findProviderByUserId(userId);
+
+    if (!provider) {
+      sendError(res, "Provider not found", 404);
+      return;
+    }
+
+    // Check permission: only provider or admin can view provider view
+    if (
+      booking.providerId !== provider.id &&
+      (req as any).user?.role !== "ADMIN"
+    ) {
+      sendError(res, "You do not have permission to view this booking", 403);
+      return;
+    }
+
+    // Get customer details
+    const { findUserById } = await import("../repositories/user.repository");
+    const customer = await findUserById(booking.customerId);
+
+    const providerView = {
+      ...booking,
+      customerDetails: customer
+        ? {
+            id: customer.id,
+            fullName: customer.fullName,
+            email: customer.email,
+            phone: customer.phone,
+            profileImage: customer.profileImage,
+          }
+        : null,
+    };
+
+    sendSuccess(res, providerView, "Booking retrieved successfully");
+  },
+);
+
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -596,4 +798,8 @@ export default {
   getProviderStatsController,
   getCustomerStatsController,
   checkBookingExistsController,
+  checkCustomerBookingOwner,
+  checkProviderBookingOwner,
+  getCustomerBookingView,
+  getProviderBookingView,
 };
