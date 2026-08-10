@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -14,7 +14,6 @@ import {
   ExclamationTriangleIcon,
   ArrowPathIcon,
   EyeIcon,
-  PencilIcon,
   TrashIcon,
   PlusIcon,
   FunnelIcon,
@@ -22,14 +21,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon,
-  ArrowUpRightIcon,
-  ArrowDownRightIcon,
-  DocumentTextIcon,
-  UserIcon,
-  BriefcaseIcon,
   StarIcon,
-  PhoneIcon,
+  BriefcaseIcon,
+  UserIcon,
   EnvelopeIcon,
+  PhoneIcon,
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
 
@@ -180,37 +176,37 @@ async function getBookingDetails(bookingId: string): Promise<Booking> {
 const STATUS_CONFIG = {
   PENDING: {
     label: 'Pending',
-    color: 'bg-yellow-100 text-yellow-800',
+    color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     icon: ClockIcon,
     actions: ['cancel'],
   },
   CONFIRMED: {
     label: 'Confirmed',
-    color: 'bg-blue-100 text-blue-800',
+    color: 'bg-blue-100 text-blue-800 border-blue-200',
     icon: CheckCircleIcon,
     actions: ['view', 'cancel'],
   },
   IN_PROGRESS: {
     label: 'In Progress',
-    color: 'bg-purple-100 text-purple-800',
+    color: 'bg-purple-100 text-purple-800 border-purple-200',
     icon: ArrowPathIcon,
     actions: ['view'],
   },
   COMPLETED: {
     label: 'Completed',
-    color: 'bg-green-100 text-green-800',
+    color: 'bg-green-100 text-green-800 border-green-200',
     icon: CheckCircleIcon,
     actions: ['view', 'review'],
   },
   CANCELLED: {
     label: 'Cancelled',
-    color: 'bg-red-100 text-red-800',
+    color: 'bg-red-100 text-red-800 border-red-200',
     icon: XCircleIcon,
     actions: ['view'],
   },
   DISPUTED: {
     label: 'Disputed',
-    color: 'bg-orange-100 text-orange-800',
+    color: 'bg-orange-100 text-orange-800 border-orange-200',
     icon: ExclamationTriangleIcon,
     actions: ['view'],
   },
@@ -228,7 +224,7 @@ function StatusBadge({ status }: { status: string }) {
   const Icon = config.icon;
 
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${config.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.color}`}>
       <Icon className="w-3 h-3" />
       {config.label}
     </span>
@@ -243,11 +239,13 @@ function BookingRow({
   onView,
   onCancel,
   onReview,
+  onRebook,
 }: {
   booking: Booking;
   onView: (booking: Booking) => void;
   onCancel: (booking: Booking) => void;
   onReview: (booking: Booking) => void;
+  onRebook: (booking: Booking) => void;
 }) {
   const scheduledDate = new Date(booking.scheduledDate);
   const formattedDate = scheduledDate.toLocaleDateString('en-US', {
@@ -261,10 +259,12 @@ function BookingRow({
   });
 
   const statusConfig = STATUS_CONFIG[booking.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.PENDING;
+  const canCancel = ['PENDING', 'CONFIRMED'].includes(booking.status);
+  const canReview = booking.status === 'COMPLETED' && !booking.review;
 
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all duration-200">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0 flex-1">
           <div className="flex-shrink-0">
             {booking.provider.businessLogo ? (
@@ -303,8 +303,8 @@ function BookingRow({
                 <CalendarIcon className="w-3.5 h-3.5" />
                 {formattedDate} at {formattedTime}
               </span>
-              <span className="flex items-center gap-1">
-                <MapPinIcon className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1 truncate max-w-[200px]">
+                <MapPinIcon className="w-3.5 h-3.5 flex-shrink-0" />
                 {booking.address}
               </span>
               {booking.service && (
@@ -320,7 +320,9 @@ function BookingRow({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => onView(booking)}
             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -328,7 +330,8 @@ function BookingRow({
           >
             <EyeIcon className="w-4 h-4" />
           </button>
-          {statusConfig.actions.includes('cancel') && booking.status !== 'CANCELLED' && (
+
+          {canCancel && (
             <button
               onClick={() => onCancel(booking)}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -337,13 +340,24 @@ function BookingRow({
               <XCircleIcon className="w-4 h-4" />
             </button>
           )}
-          {statusConfig.actions.includes('review') && !booking.review && (
+
+          {canReview && (
             <button
               onClick={() => onReview(booking)}
               className="p-1.5 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
               title="Leave Review"
             >
               <StarIcon className="w-4 h-4" />
+            </button>
+          )}
+
+          {booking.status === 'COMPLETED' && (
+            <button
+              onClick={() => onRebook(booking)}
+              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+              title="Book Again"
+            >
+              <ArrowPathIcon className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -400,10 +414,16 @@ function BookingDetailsModal({
   booking,
   isOpen,
   onClose,
+  onCancel,
+  onReview,
+  onRebook,
 }: {
   booking: Booking | null;
   isOpen: boolean;
   onClose: () => void;
+  onCancel: (booking: Booking) => void;
+  onReview: (booking: Booking) => void;
+  onRebook: (booking: Booking) => void;
 }) {
   if (!isOpen || !booking) return null;
 
@@ -421,12 +441,15 @@ function BookingDetailsModal({
 
   const statusConfig = STATUS_CONFIG[booking.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.PENDING;
   const StatusIcon = statusConfig.icon;
+  const canCancel = ['PENDING', 'CONFIRMED'].includes(booking.status);
+  const canReview = booking.status === 'COMPLETED' && !booking.review;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-lg ${statusConfig.color.replace('text-', 'bg-').replace('bg-', '')}`}>
               <StatusIcon className="w-5 h-5" />
@@ -441,6 +464,7 @@ function BookingDetailsModal({
           </button>
         </div>
 
+        {/* Content */}
         <div className="p-6 space-y-6">
           {/* Provider */}
           <div className="flex items-start gap-4">
@@ -554,24 +578,24 @@ function BookingDetailsModal({
           {/* Timestamps */}
           <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-2 text-xs text-gray-400">
             <div>
-              <span className="block">Created</span>
+              <span className="block font-medium text-gray-600">Created</span>
               {new Date(booking.createdAt).toLocaleString()}
             </div>
             {booking.confirmedAt && (
               <div>
-                <span className="block">Confirmed</span>
+                <span className="block font-medium text-gray-600">Confirmed</span>
                 {new Date(booking.confirmedAt).toLocaleString()}
               </div>
             )}
             {booking.completedAt && (
               <div>
-                <span className="block">Completed</span>
+                <span className="block font-medium text-gray-600">Completed</span>
                 {new Date(booking.completedAt).toLocaleString()}
               </div>
             )}
             {booking.cancelledAt && (
               <div>
-                <span className="block">Cancelled</span>
+                <span className="block font-medium text-gray-600">Cancelled</span>
                 {new Date(booking.cancelledAt).toLocaleString()}
               </div>
             )}
@@ -602,30 +626,40 @@ function BookingDetailsModal({
           )}
         </div>
 
-        <div className="border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+        {/* Footer */}
+        <div className="border-t border-gray-100 px-6 py-4 flex flex-wrap justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
             Close
           </button>
-          {booking.status === 'COMPLETED' && !booking.review && (
-            <Link
-              href={`/provider/${booking.provider.id}/review?booking=${booking.id}`}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              Leave Review
-            </Link>
-          )}
-          {booking.status === 'PENDING' || booking.status === 'CONFIRMED' ? (
+
+          {canReview && (
             <button
-              onClick={() => {
-                // Trigger cancel flow from parent
-                onClose();
-                // Parent will handle cancel
-              }}
+              onClick={() => onReview(booking)}
+              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+            >
+              <StarIcon className="w-4 h-4" />
+              Leave Review
+            </button>
+          )}
+
+          {canCancel && (
+            <button
+              onClick={() => onCancel(booking)}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
             >
               Cancel Booking
             </button>
-          ) : null}
+          )}
+
+          {booking.status === 'COMPLETED' && (
+            <button
+              onClick={() => onRebook(booking)}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+            >
+              <ArrowPathIcon className="w-4 h-4" />
+              Book Again
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -795,11 +829,18 @@ export default function CustomerBookingsPage() {
   const handleConfirmCancel = async (bookingId: string, reason: string) => {
     await cancelBooking(bookingId, reason);
     loadBookings();
+    setShowCancelModal(false);
+    setSelectedBooking(null);
   };
 
   // Review booking
   const handleReviewBooking = (booking: Booking) => {
     router.push(`/provider/${booking.provider.id}/review?booking=${booking.id}`);
+  };
+
+  // Rebook
+  const handleRebook = (booking: Booking) => {
+    router.push(`/booking?provider=${booking.providerId}&service=${booking.serviceId || ''}`);
   };
 
   // Status filter options
@@ -830,6 +871,34 @@ export default function CustomerBookingsPage() {
           </Link>
         </div>
 
+        {/* Statistics Summary */}
+        {!loading && bookings.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-xl shadow-card p-4 text-center">
+              <p className="text-2xl font-bold text-blue-600">{totalItems}</p>
+              <p className="text-xs text-gray-500">Total Bookings</p>
+            </div>
+            <div className="bg-white rounded-xl shadow-card p-4 text-center">
+              <p className="text-2xl font-bold text-yellow-600">
+                {bookings.filter(b => b.status === 'PENDING').length}
+              </p>
+              <p className="text-xs text-gray-500">Pending</p>
+            </div>
+            <div className="bg-white rounded-xl shadow-card p-4 text-center">
+              <p className="text-2xl font-bold text-green-600">
+                {bookings.filter(b => b.status === 'COMPLETED').length}
+              </p>
+              <p className="text-xs text-gray-500">Completed</p>
+            </div>
+            <div className="bg-white rounded-xl shadow-card p-4 text-center">
+              <p className="text-2xl font-bold text-red-600">
+                {bookings.filter(b => b.status === 'CANCELLED').length}
+              </p>
+              <p className="text-xs text-gray-500">Cancelled</p>
+            </div>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-card p-4 mb-6 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
@@ -852,7 +921,7 @@ export default function CustomerBookingsPage() {
             </button>
           )}
           <div className="ml-auto text-sm text-gray-500">
-            {totalItems} bookings found
+            {totalItems} booking{totalItems !== 1 ? 's' : ''} found
           </div>
         </div>
 
@@ -880,7 +949,9 @@ export default function CustomerBookingsPage() {
                 <div className="text-6xl mb-4">📋</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No bookings found</h3>
                 <p className="text-gray-600 max-w-md mx-auto">
-                  You haven't made any bookings yet. Start exploring services and find the right professional for your needs.
+                  {statusFilter
+                    ? `You don't have any ${statusFilter.toLowerCase()} bookings. Try changing your filter.`
+                    : "You haven't made any bookings yet. Start exploring services and find the right professional for your needs."}
                 </p>
                 <Link
                   href="/search"
@@ -898,6 +969,7 @@ export default function CustomerBookingsPage() {
                     onView={handleViewBooking}
                     onCancel={handleCancelBooking}
                     onReview={handleReviewBooking}
+                    onRebook={handleRebook}
                   />
                 ))}
               </div>
@@ -913,35 +985,43 @@ export default function CustomerBookingsPage() {
                 >
                   <ChevronLeftIcon className="w-5 h-5" />
                 </button>
-                {[...Array(totalPages)].map((_, i) => {
-                  const p = i + 1;
-                  // Show limited pages with ellipsis
-                  if (
-                    p === 1 ||
-                    p === totalPages ||
-                    Math.abs(p - page) <= 1
-                  ) {
-                    return (
-                      <button
-                        key={p}
-                        onClick={() => handlePageChange(p)}
-                        className={`px-4 py-2 rounded-lg border transition-colors ${
-                          p === page
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    );
-                  } else if (
-                    (p === 2 && page > 3) ||
-                    (p === totalPages - 1 && page < totalPages - 2)
-                  ) {
-                    return <span key={p} className="px-2">...</span>;
+                {[...Array(Math.min(totalPages, 7))].map((_, i) => {
+                  let p: number;
+                  if (totalPages <= 7) {
+                    p = i + 1;
+                  } else if (page <= 4) {
+                    p = i + 1;
+                  } else if (page >= totalPages - 3) {
+                    p = totalPages - 6 + i;
+                  } else {
+                    p = page - 3 + i;
                   }
-                  return null;
+                  if (p > totalPages) return null;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => handlePageChange(p)}
+                      className={`px-4 py-2 rounded-lg border transition-colors min-w-[40px] ${
+                        p === page
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
                 })}
+                {totalPages > 7 && page < totalPages - 3 && (
+                  <span className="px-2 text-gray-400">...</span>
+                )}
+                {totalPages > 7 && page < totalPages - 3 && (
+                  <button
+                    onClick={() => handlePageChange(totalPages)}
+                    className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+                  >
+                    {totalPages}
+                  </button>
+                )}
                 <button
                   onClick={() => handlePageChange(page + 1)}
                   disabled={page >= totalPages}
@@ -963,6 +1043,9 @@ export default function CustomerBookingsPage() {
           setShowDetailsModal(false);
           setSelectedBooking(null);
         }}
+        onCancel={handleCancelBooking}
+        onReview={handleReviewBooking}
+        onRebook={handleRebook}
       />
 
       {/* Cancel Booking Modal */}
