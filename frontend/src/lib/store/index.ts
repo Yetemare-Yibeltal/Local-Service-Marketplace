@@ -6,23 +6,33 @@
 // ============================================================
 
 // Auth Store
-export { default as useAuthStore, useAuthStore as useAuth } from './auth.store';
-export type { AuthState, AuthActions, AuthStore, User, AuthTokens } from './auth.store';
+export { default as useAuthStore } from './auth.store';
+export type {
+  AuthState,
+  AuthActions,
+  AuthStore,
+  User,
+  AuthTokens,
+  LoginCredentials,
+  RegisterData,
+} from './auth.store';
 
 // Booking Store
-export { default as useBookingStore, useBookingStore as useBooking } from './booking.store';
+export { default as useBookingStore } from './booking.store';
 export type {
   BookingState,
   BookingActions,
   BookingStore,
   Booking,
   CreateBookingData,
+  UpdateBookingData,
   BookingFilters,
   BookingStats,
+  PaginatedBookingResponse,
 } from './booking.store';
 
 // Provider Store
-export { default as useProviderStore, useProviderStore as useProvider } from './provider.store';
+export { default as useProviderStore } from './provider.store';
 export type {
   ProviderState,
   ProviderActions,
@@ -31,10 +41,11 @@ export type {
   Service,
   CreateServiceData,
   UpdateServiceData,
+  FavoriteProvider,
 } from './provider.store';
 
 // Search Store
-export { default as useSearchStore, useSearchStore as useSearch } from './search.store';
+export { default as useSearchStore } from './search.store';
 export type {
   SearchState,
   SearchActions,
@@ -44,13 +55,11 @@ export type {
   SearchData,
   SearchResponse,
   FacetResult,
+  AutocompleteResult,
 } from './search.store';
 
 // Notification Store
-export {
-  default as useNotificationStore,
-  useNotificationStore as useNotification,
-} from './notification.store';
+export { default as useNotificationStore } from './notification.store';
 export type {
   NotificationState,
   NotificationActions,
@@ -62,27 +71,38 @@ export type {
 } from './notification.store';
 
 // UI Store
-export { default as useUIStore, useUIStore as useUI } from './ui.store';
-export type { UIState, UIActions, UIStore, ToastMessage, ModalConfig, Theme } from './ui.store';
+export { default as useUIStore } from './ui.store';
+export type {
+  UIState,
+  UIActions,
+  UIStore,
+  ToastMessage,
+  ToastType,
+  ModalConfig,
+  ModalSize,
+  Theme,
+  SidebarState,
+  LoadingState,
+} from './ui.store';
 
 // ============================================================
-// RE-EXPORT ALL STORES AS A SINGLE OBJECT
+// RE-EXPORT ALL STORES AS A SINGLE OBJECT FOR CONVENIENCE
 // ============================================================
 
-import * as authStore from './auth.store';
-import * as bookingStore from './booking.store';
-import * as providerStore from './provider.store';
-import * as searchStore from './search.store';
-import * as notificationStore from './notification.store';
-import * as uiStore from './ui.store';
+import useAuthStore from './auth.store';
+import useBookingStore from './booking.store';
+import useProviderStore from './provider.store';
+import useSearchStore from './search.store';
+import useNotificationStore from './notification.store';
+import useUIStore from './ui.store';
 
 export const stores = {
-  auth: authStore,
-  booking: bookingStore,
-  provider: providerStore,
-  search: searchStore,
-  notification: notificationStore,
-  ui: uiStore,
+  auth: useAuthStore,
+  booking: useBookingStore,
+  provider: useProviderStore,
+  search: useSearchStore,
+  notification: useNotificationStore,
+  ui: useUIStore,
 };
 
 // ============================================================
