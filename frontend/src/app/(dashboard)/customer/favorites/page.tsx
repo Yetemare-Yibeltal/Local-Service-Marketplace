@@ -8,6 +8,7 @@ import {
   HeartIcon,
   HeartIcon as HeartSolidIcon,
   StarIcon,
+  StarIcon as StarSolidIcon,
   MapPinIcon,
   BriefcaseIcon,
   CheckBadgeIcon,
@@ -19,9 +20,8 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
   ChevronRightIcon,
+  UserIcon,
 } from '@heroicons/react/24/outline';
-import { StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
-import { HeartIcon as HeartSolidFilled } from '@heroicons/react/24/solid';
 
 // ============================================================
 // TYPES
@@ -119,13 +119,6 @@ async function removeFavorite(providerId: string): Promise<void> {
   });
 }
 
-async function addFavorite(providerId: string): Promise<void> {
-  await fetchWithAuth(`/providers/favorites`, {
-    method: 'POST',
-    body: JSON.stringify({ providerId }),
-  });
-}
-
 // ============================================================
 // COMPONENTS
 // ============================================================
@@ -158,10 +151,14 @@ function FavoriteProviderCard({
     }
   };
 
+  const getInitials = (name: string) => {
+    return name.charAt(0).toUpperCase();
+  };
+
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all duration-200 group">
-      <div className="flex flex-col md:flex-row md:items-start gap-4">
-        {/* Provider Logo */}
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+        {/* Logo */}
         <div className="flex-shrink-0">
           {provider.businessLogo ? (
             <Image
@@ -178,7 +175,7 @@ function FavoriteProviderCard({
           )}
         </div>
 
-        {/* Provider Info */}
+        {/* Details */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -417,7 +414,6 @@ export default function CustomerFavoritesPage() {
   const handleRemoveFavorite = async (providerId: string) => {
     try {
       await removeFavorite(providerId);
-      // Refresh list
       await loadFavorites();
     } catch (error) {
       console.error('Error removing favorite:', error);
@@ -442,6 +438,36 @@ export default function CustomerFavoritesPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <ArrowPathIcon className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
+          <p className="mt-2 text-gray-500">Loading favorites...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="container-custom max-w-7xl">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+            <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />
+            <span>{error}</span>
+            <button
+              onClick={loadFavorites}
+              className="ml-auto text-sm text-red-700 hover:text-red-900 font-medium"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container-custom max-w-7xl">
@@ -450,8 +476,9 @@ export default function CustomerFavoritesPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Favorite Providers</h1>
             <p className="text-gray-600 mt-0.5">
-              Your saved providers for quick access
-              {totalItems > 0 && ` · ${totalItems} favorite${totalItems !== 1 ? 's' : ''}`}
+              {totalItems > 0
+                ? `${totalItems} favorite${totalItems !== 1 ? 's' : ''} saved`
+                : 'No favorites yet'}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -472,76 +499,34 @@ export default function CustomerFavoritesPage() {
           </div>
         </div>
 
-        {/* Loading */}
-        {loading && (
-          <div className="text-center py-12">
-            <ArrowPathIcon className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
-            <p className="mt-2 text-gray-500">Loading your favorites...</p>
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2 mb-6">
-            <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />
-            <span>{error}</span>
-            <button
-              onClick={loadFavorites}
-              className="ml-auto text-sm text-red-700 hover:text-red-900 font-medium"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
         {/* Favorites List */}
-        {!loading && !error && (
+        {favorites.length === 0 ? (
+          <EmptyState />
+        ) : (
           <>
-            {favorites.length === 0 ? (
-              <EmptyState />
-            ) : (
-              <>
-                <div className="space-y-3">
-                  {favorites.map((favorite) => (
-                    <FavoriteProviderCard
-                      key={favorite.id}
-                      favorite={favorite}
-                      onRemove={handleRemoveFavorite}
-                      onView={handleViewProvider}
-                      onBook={handleBookProvider}
-                    />
-                  ))}
-                </div>
+            <div className="space-y-3">
+              {favorites.map((favorite) => (
+                <FavoriteProviderCard
+                  key={favorite.id}
+                  favorite={favorite}
+                  onRemove={handleRemoveFavorite}
+                  onView={handleViewProvider}
+                  onBook={handleBookProvider}
+                />
+              ))}
+            </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <Pagination
-                    currentPage={page}
-                    totalPages={totalPages}
-                    onPageChange={handlePageChange}
-                  />
-                )}
-              </>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
             )}
           </>
         )}
       </div>
     </div>
-  );
-}
-
-function ChevronLeftIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-    </svg>
   );
 }
