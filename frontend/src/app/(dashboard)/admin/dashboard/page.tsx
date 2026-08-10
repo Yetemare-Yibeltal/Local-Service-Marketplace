@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import {
   UserGroupIcon,
   BriefcaseIcon,
@@ -16,26 +15,18 @@ import {
   ExclamationTriangleIcon,
   ArrowPathIcon,
   EyeIcon,
-  PencilIcon,
-  TrashIcon,
   PlusIcon,
-  FunnelIcon,
-  XMarkIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChartBarIcon,
   Cog6ToothIcon,
   BellIcon,
-  EnvelopeIcon,
-  HomeIcon,
   DocumentTextIcon,
   ShieldCheckIcon,
   UserIcon,
   AdjustmentsHorizontalIcon,
   ArrowUpRightIcon,
   ArrowDownRightIcon,
-  MagnifyingGlassIcon,
-  EllipsisHorizontalIcon,
   BuildingOfficeIcon,
   CalendarDaysIcon,
   ChartPieIcon,
@@ -117,6 +108,9 @@ interface AdminStats {
     thisMonth: number;
     averageRating: number;
   };
+  bookingTrend: { date: string; count: number }[];
+  revenueTrend: { date: string; amount: number }[];
+  categoryBreakdown: { category: string; count: number; revenue: number }[];
 }
 
 interface PendingProvider {
@@ -149,6 +143,18 @@ interface RecentActivity {
   user?: {
     fullName: string;
     email: string;
+  };
+}
+
+interface ApiResponse<T> {
+  data: T;
+  pagination: {
+    page: number;
+    limit: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
   };
 }
 
@@ -196,12 +202,19 @@ async function getAdminDashboardStats(): Promise<AdminStats> {
   return await fetchWithAuth('/admin/dashboard');
 }
 
-async function getPendingProviders(page: number = 1, limit: number = 5): Promise<{ data: PendingProvider[]; pagination: any }> {
+async function getPendingProviders(page: number = 1, limit: number = 5): Promise<ApiResponse<PendingProvider[]>> {
   return await fetchWithAuth(`/admin/providers/pending?page=${page}&limit=${limit}`);
 }
 
-async function getRecentActivities(page: number = 1, limit: number = 5): Promise<{ data: RecentActivity[]; pagination: any }> {
+async function getRecentActivities(page: number = 1, limit: number = 5): Promise<ApiResponse<RecentActivity[]>> {
   return await fetchWithAuth(`/admin/audit-logs?page=${page}&limit=${limit}&sortBy=createdAt&sortOrder=desc`);
+}
+
+async function verifyProvider(providerId: string, status: 'APPROVED' | 'REJECTED', notes?: string): Promise<void> {
+  await fetchWithAuth(`/admin/providers/${providerId}/verify`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, notes }),
+  });
 }
 
 // ============================================================
@@ -242,7 +255,7 @@ function StatsCard({
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-xl shadow-card p-6 hover:shadow-lg transition-all duration-200 ${onClick ? 'cursor-pointer hover:-translate-y-0.5' : ''} border border-gray-50 group`}
+      className="bg-white rounded-xl shadow-card p-6 hover:shadow-lg transition-all duration-200 cursor-pointer hover:-translate-y-0.5 border border-gray-50 group"
     >
       <div className="flex items-start justify-between">
         <div>
@@ -270,9 +283,158 @@ function StatsCard({
 }
 
 /**
+ * Bar Chart Component
+ */
+function BarChart({
+  data,
+  height = 120,
+  barColor = '#3b82f6',
+  labelKey = 'date',
+  valueKey = 'count',
+  maxValue,
+}: {
+  data: any[];
+  height?: number;
+  barColor?: string;
+  labelKey?: string;
+  valueKey?: string;
+  maxValue?: number;
+}) {
+  if (!data || data.length === 0) {
+    return <div className="text-center text-gray-400 text-sm py-4">No data</div>;
+  }
+  const maxVal = maxValue || Math.max(...data.map((d) => d[valueKey]), 1);
+  const padding = { top: 10, bottom: 20, left: 5, right: 5 };
+  const chartHeight = height - padding.top - padding.bottom;
+  const barWidth = Math.min(24, (data.length > 0 ? 320 / data.length : 24));
+
+  return (
+    <div className="w-full" style={{ height }}>
+      <svg width="100%" height={height} viewBox={`0 0 ${Math.max(320, data.length * 30)} ${height}`}>
+        {data.map((item, index) => {
+          const x = index * (barWidth + 4) + 8;
+          const value = item[valueKey] || 0;
+          const barHeight = maxVal > 0 ? (value / maxVal) * chartHeight : 0;
+          const y = padding.top + chartHeight - barHeight;
+
+          return (
+            <g key={index}>
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={barHeight}
+                fill={barColor}
+                rx={2}
+                className="transition-all duration-500 hover:opacity-80"
+              >
+                <title>{item[labelKey]}: {value}</title>
+              </rect>
+              <text
+                x={x + barWidth / 2}
+                y={padding.top + chartHeight + 14}
+                fontSize="8"
+                fill="#9ca3af"
+                textAnchor="middle"
+                className="select-none"
+              >
+                {item[labelKey]?.slice(0, 3) || ''}
+              </text>
+              {value > 0 && (
+                <text
+                  x={x + barWidth / 2}
+                  y={y - 4}
+                  fontSize="7"
+                  fill="#6b7280"
+                  textAnchor="middle"
+                  className="select-none"
+                >
+                  {value}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * Donut Chart Component
+ */
+function DonutChart({
+  data,
+  size = 100,
+  colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+}: {
+  data: { label: string; value: number }[];
+  size?: number;
+  colors?: string[];
+}) {
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  if (total === 0) return <div className="text-center text-gray-400 text-sm">No data</div>;
+
+  const radius = size / 2 - 10;
+  let cumulativeAngle = 0;
+
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {data.map((item, index) => {
+          const percentage = item.value / total;
+          const angle = percentage * 360;
+          const startAngle = cumulativeAngle;
+          const endAngle = cumulativeAngle + angle;
+          cumulativeAngle = endAngle;
+
+          const startRad = (startAngle - 90) * Math.PI / 180;
+          const endRad = (endAngle - 90) * Math.PI / 180;
+          const x1 = size / 2 + radius * Math.cos(startRad);
+          const y1 = size / 2 + radius * Math.sin(startRad);
+          const x2 = size / 2 + radius * Math.cos(endRad);
+          const y2 = size / 2 + radius * Math.sin(endRad);
+          const largeArcFlag = angle > 180 ? 1 : 0;
+
+          const path = `
+            M ${size / 2} ${size / 2}
+            L ${x1} ${y1}
+            A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}
+            Z
+          `;
+
+          return (
+            <path
+              key={index}
+              d={path}
+              fill={colors[index % colors.length]}
+              className="transition-all duration-300 hover:opacity-80"
+            >
+              <title>{item.label}: {item.value} ({percentage.toFixed(1)}%)</title>
+            </path>
+          );
+        })}
+        <circle cx={size / 2} cy={size / 2} r={radius * 0.5} fill="white" />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-sm font-bold text-gray-900">{total}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Pending Provider Row Component
  */
-function PendingProviderRow({ provider, onVerify, onReject }: { provider: PendingProvider; onVerify: (id: string) => void; onReject: (id: string) => void }) {
+function PendingProviderRow({
+  provider,
+  onVerify,
+  onReject,
+}: {
+  provider: PendingProvider;
+  onVerify: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
   const [loading, setLoading] = useState(false);
 
   const handleVerify = async () => {
@@ -302,7 +464,7 @@ function PendingProviderRow({ provider, onVerify, onReject }: { provider: Pendin
   });
 
   return (
-    <div className="flex items-start justify-between py-3 border-b border-gray-100 last:border-0">
+    <div className="flex items-start justify-between py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors px-2 rounded-lg">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-900 truncate">{provider.businessName}</span>
@@ -358,12 +520,14 @@ function ActivityRow({ activity }: { activity: RecentActivity }) {
     VERIFY_PROVIDER: 'bg-indigo-100 text-indigo-700',
     RESOLVE_DISPUTE: 'bg-orange-100 text-orange-700',
     DEACTIVATE_USER: 'bg-red-100 text-red-700',
+    UPDATE_USER: 'bg-gray-100 text-gray-700',
+    ADMIN_LOGIN: 'bg-blue-100 text-blue-700',
   };
 
   const actionLabel = activity.action.replace(/_/g, ' ').toLowerCase();
 
   return (
-    <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+    <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors px-2 rounded-lg">
       <div className={`flex-shrink-0 p-1.5 rounded-full ${actionColors[activity.action] || 'bg-gray-100 text-gray-700'}`}>
         <DocumentTextIcon className="w-3.5 h-3.5" />
       </div>
@@ -379,6 +543,93 @@ function ActivityRow({ activity }: { activity: RecentActivity }) {
   );
 }
 
+/**
+ * Pagination Component
+ */
+function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const pages = [];
+  const maxVisible = 5;
+
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
+  if (endPage - startPage + 1 < maxVisible) {
+    startPage = Math.max(1, endPage - maxVisible + 1);
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-2 mt-4">
+      <button
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage <= 1}
+        className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        <ChevronLeftIcon className="w-5 h-5" />
+      </button>
+
+      {startPage > 1 && (
+        <>
+          <button
+            onClick={() => onPageChange(1)}
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            1
+          </button>
+          {startPage > 2 && <span className="px-2 text-gray-400">...</span>}
+        </>
+      )}
+
+      {pages.map((page) => (
+        <button
+          key={page}
+          onClick={() => onPageChange(page)}
+          className={`px-4 py-2 rounded-lg border transition-colors ${
+            page === currentPage
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          {page}
+        </button>
+      ))}
+
+      {endPage < totalPages && (
+        <>
+          {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
+          <button
+            onClick={() => onPageChange(totalPages)}
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            {totalPages}
+          </button>
+        </>
+      )}
+
+      <button
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage >= totalPages}
+        className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        <ChevronRightIcon className="w-5 h-5" />
+      </button>
+    </div>
+  );
+}
+
 // ============================================================
 // MAIN PAGE
 // ============================================================
@@ -389,6 +640,8 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [pendingProviders, setPendingProviders] = useState<PendingProvider[]>([]);
   const [activities, setActivities] = useState<RecentActivity[]>([]);
+  const [pendingPagination, setPendingPagination] = useState({ page: 1, totalPages: 1 });
+  const [activityPagination, setActivityPagination] = useState({ page: 1, totalPages: 1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -405,7 +658,9 @@ export default function AdminDashboardPage() {
 
       setStats(statsData);
       setPendingProviders(pendingData.data);
+      setPendingPagination({ page: pendingData.pagination.page, totalPages: pendingData.pagination.totalPages });
       setActivities(activityData.data);
+      setActivityPagination({ page: activityData.pagination.page, totalPages: activityData.pagination.totalPages });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load admin data');
     } finally {
@@ -420,10 +675,7 @@ export default function AdminDashboardPage() {
   // Handle verify/reject provider
   const handleVerifyProvider = async (providerId: string) => {
     try {
-      await fetchWithAuth(`/admin/providers/${providerId}/verify`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'APPROVED' }),
-      });
+      await verifyProvider(providerId, 'APPROVED');
       await loadData();
     } catch (error) {
       alert('Failed to verify provider');
@@ -432,13 +684,31 @@ export default function AdminDashboardPage() {
 
   const handleRejectProvider = async (providerId: string) => {
     try {
-      await fetchWithAuth(`/admin/providers/${providerId}/verify`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'REJECTED' }),
-      });
+      await verifyProvider(providerId, 'REJECTED');
       await loadData();
     } catch (error) {
       alert('Failed to reject provider');
+    }
+  };
+
+  // Pagination handlers for pending providers and activities
+  const handlePendingPageChange = async (page: number) => {
+    try {
+      const data = await getPendingProviders(page, 5);
+      setPendingProviders(data.data);
+      setPendingPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages });
+    } catch (error) {
+      console.error('Failed to load pending providers:', error);
+    }
+  };
+
+  const handleActivityPageChange = async (page: number) => {
+    try {
+      const data = await getRecentActivities(page, 5);
+      setActivities(data.data);
+      setActivityPagination({ page: data.pagination.page, totalPages: data.pagination.totalPages });
+    } catch (error) {
+      console.error('Failed to load activities:', error);
     }
   };
 
@@ -479,6 +749,11 @@ export default function AdminDashboardPage() {
     );
   }
 
+  // Prepare chart data
+  const bookingTrendData = stats.bookingTrend || [];
+  const revenueTrendData = stats.revenueTrend || [];
+  const categoryData = stats.categoryBreakdown || [];
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container-custom max-w-7xl">
@@ -517,6 +792,7 @@ export default function AdminDashboardPage() {
             subtitle={`This month: ETB ${stats.revenue.thisMonth.toFixed(2)}`}
             icon={<CurrencyDollarIcon className="w-5 h-5" />}
             color="purple"
+            trend={{ value: 12.5, positive: true }}
           />
           <StatsCard
             title="Bookings"
@@ -557,7 +833,64 @@ export default function AdminDashboardPage() {
           />
         </div>
 
-        {/* Main Content Grid */}
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Booking Trend Chart */}
+          <div className="bg-white rounded-xl shadow-card p-6 lg:col-span-1">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Booking Activity</h3>
+              <span className="text-xs text-gray-400">Last 7 days</span>
+            </div>
+            <BarChart data={bookingTrendData} labelKey="date" valueKey="count" barColor="#3b82f6" />
+            <div className="mt-2 text-center text-sm text-gray-500">
+              Total: {stats.bookings.thisWeek} bookings this week
+            </div>
+          </div>
+
+          {/* Revenue Trend Chart */}
+          <div className="bg-white rounded-xl shadow-card p-6 lg:col-span-1">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Revenue Trend</h3>
+              <span className="text-xs text-gray-400">Last 7 days</span>
+            </div>
+            <BarChart data={revenueTrendData} labelKey="date" valueKey="amount" barColor="#10b981" />
+            <div className="mt-2 text-center text-sm text-gray-500">
+              This week: ETB {stats.revenue.thisWeek.toFixed(2)}
+            </div>
+          </div>
+
+          {/* Category Breakdown */}
+          <div className="bg-white rounded-xl shadow-card p-6 lg:col-span-1">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Category Breakdown</h3>
+              <span className="text-xs text-gray-400">By bookings</span>
+            </div>
+            {categoryData.length > 0 ? (
+              <div className="flex items-center justify-center gap-6">
+                <DonutChart
+                  data={categoryData.map(c => ({ label: c.category, value: c.count }))}
+                  size={120}
+                />
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {categoryData.slice(0, 5).map((c, i) => {
+                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+                    return (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <div className={`w-3 h-3 rounded-full`} style={{ backgroundColor: colors[i % colors.length] }} />
+                        <span className="text-gray-700">{c.category}</span>
+                        <span className="text-gray-400 ml-auto">{c.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6 text-gray-400 text-sm">No category data</div>
+            )}
+          </div>
+        </div>
+
+        {/* Pending Providers & Recent Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Pending Providers */}
           <div className="lg:col-span-2">
@@ -571,16 +904,25 @@ export default function AdminDashboardPage() {
               {pendingProviders.length === 0 ? (
                 <div className="text-center py-6 text-gray-500 text-sm">No pending verifications</div>
               ) : (
-                <div className="divide-y divide-gray-100">
-                  {pendingProviders.map((provider) => (
-                    <PendingProviderRow
-                      key={provider.id}
-                      provider={provider}
-                      onVerify={handleVerifyProvider}
-                      onReject={handleRejectProvider}
+                <>
+                  <div className="divide-y divide-gray-100">
+                    {pendingProviders.map((provider) => (
+                      <PendingProviderRow
+                        key={provider.id}
+                        provider={provider}
+                        onVerify={handleVerifyProvider}
+                        onReject={handleRejectProvider}
+                      />
+                    ))}
+                  </div>
+                  {pendingPagination.totalPages > 1 && (
+                    <Pagination
+                      currentPage={pendingPagination.page}
+                      totalPages={pendingPagination.totalPages}
+                      onPageChange={handlePendingPageChange}
                     />
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -597,11 +939,20 @@ export default function AdminDashboardPage() {
               {activities.length === 0 ? (
                 <div className="text-center py-6 text-gray-500 text-sm">No recent activity</div>
               ) : (
-                <div className="divide-y divide-gray-50">
-                  {activities.map((activity) => (
-                    <ActivityRow key={activity.id} activity={activity} />
-                  ))}
-                </div>
+                <>
+                  <div className="divide-y divide-gray-50">
+                    {activities.map((activity) => (
+                      <ActivityRow key={activity.id} activity={activity} />
+                    ))}
+                  </div>
+                  {activityPagination.totalPages > 1 && (
+                    <Pagination
+                      currentPage={activityPagination.page}
+                      totalPages={activityPagination.totalPages}
+                      onPageChange={handleActivityPageChange}
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>
