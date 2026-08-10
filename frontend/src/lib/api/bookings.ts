@@ -131,16 +131,12 @@ export interface PaginatedResponse<T> {
 // API FUNCTIONS
 // ============================================================
 
-// ============================================================
-// CREATE
-// ============================================================
-
 /**
  * Create a new booking
  */
 export async function createBooking(data: CreateBookingData): Promise<Booking> {
   const client = getApiClient();
-  return await client.post<Booking>('/bookings', {
+  const response = await client.post<{ data: Booking }>('/bookings', {
     providerId: data.providerId,
     serviceId: data.serviceId,
     scheduledDate: data.scheduledDate,
@@ -149,18 +145,16 @@ export async function createBooking(data: CreateBookingData): Promise<Booking> {
     totalPrice: data.totalPrice,
     depositAmount: data.depositAmount || 0,
   });
+  return response.data;
 }
-
-// ============================================================
-// READ
-// ============================================================
 
 /**
  * Get booking by ID
  */
 export async function getBookingById(id: string): Promise<Booking> {
   const client = getApiClient();
-  return await client.get(`/bookings/${id}`);
+  const response = await client.get<{ data: Booking }>(`/bookings/${id}`);
+  return response.data;
 }
 
 /**
@@ -168,17 +162,19 @@ export async function getBookingById(id: string): Promise<Booking> {
  */
 export async function getBookingByNumber(bookingNumber: string): Promise<Booking> {
   const client = getApiClient();
-  return await client.get(`/bookings/number/${bookingNumber}`);
+  const response = await client.get<{ data: Booking }>(`/bookings/number/${bookingNumber}`);
+  return response.data;
 }
 
 /**
- * Get customer bookings
+ * Get customer bookings with filters
  */
 export async function getCustomerBookings(
   filters: BookingFilters = {}
 ): Promise<PaginatedResponse<Booking>> {
   const client = getApiClient();
   const params = new URLSearchParams();
+
   if (filters.status) params.append('status', filters.status);
   if (filters.startDate) params.append('startDate', filters.startDate);
   if (filters.endDate) params.append('endDate', filters.endDate);
@@ -188,17 +184,31 @@ export async function getCustomerBookings(
   if (filters.sortBy) params.append('sortBy', filters.sortBy);
   if (filters.sortOrder) params.append('sortOrder', filters.sortOrder);
 
-  return await client.get(`/bookings/customer?${params.toString()}`);
+  const response = await client.get<{ data: Booking[]; pagination: any }>(
+    `/bookings/customer?${params.toString()}`
+  );
+  return {
+    data: response.data || [],
+    pagination: response.pagination || {
+      page: filters.page || 1,
+      limit: filters.limit || 10,
+      totalItems: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  };
 }
 
 /**
- * Get provider bookings
+ * Get provider bookings with filters
  */
 export async function getProviderBookings(
   filters: BookingFilters = {}
 ): Promise<PaginatedResponse<Booking>> {
   const client = getApiClient();
   const params = new URLSearchParams();
+
   if (filters.status) params.append('status', filters.status);
   if (filters.startDate) params.append('startDate', filters.startDate);
   if (filters.endDate) params.append('endDate', filters.endDate);
@@ -208,7 +218,20 @@ export async function getProviderBookings(
   if (filters.sortBy) params.append('sortBy', filters.sortBy);
   if (filters.sortOrder) params.append('sortOrder', filters.sortOrder);
 
-  return await client.get(`/bookings/provider?${params.toString()}`);
+  const response = await client.get<{ data: Booking[]; pagination: any }>(
+    `/bookings/provider?${params.toString()}`
+  );
+  return {
+    data: response.data || [],
+    pagination: response.pagination || {
+      page: filters.page || 1,
+      limit: filters.limit || 10,
+      totalItems: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  };
 }
 
 /**
@@ -219,6 +242,7 @@ export async function getAdminBookings(
 ): Promise<PaginatedResponse<Booking>> {
   const client = getApiClient();
   const params = new URLSearchParams();
+
   if (filters.status) params.append('status', filters.status);
   if (filters.providerId) params.append('providerId', filters.providerId);
   if (filters.customerId) params.append('customerId', filters.customerId);
@@ -230,19 +254,29 @@ export async function getAdminBookings(
   if (filters.sortBy) params.append('sortBy', filters.sortBy);
   if (filters.sortOrder) params.append('sortOrder', filters.sortOrder);
 
-  return await client.get(`/bookings/admin?${params.toString()}`);
+  const response = await client.get<{ data: Booking[]; pagination: any }>(
+    `/bookings/admin?${params.toString()}`
+  );
+  return {
+    data: response.data || [],
+    pagination: response.pagination || {
+      page: filters.page || 1,
+      limit: filters.limit || 10,
+      totalItems: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  };
 }
-
-// ============================================================
-// UPDATE
-// ============================================================
 
 /**
  * Update booking
  */
 export async function updateBooking(id: string, data: UpdateBookingData): Promise<Booking> {
   const client = getApiClient();
-  return await client.put<Booking>(`/bookings/${id}`, data);
+  const response = await client.put<{ data: Booking }>(`/bookings/${id}`, data);
+  return response.data;
 }
 
 /**
@@ -253,19 +287,17 @@ export async function updateBookingStatus(
   data: UpdateBookingStatusData
 ): Promise<Booking> {
   const client = getApiClient();
-  return await client.patch<Booking>(`/bookings/${id}/status`, data);
+  const response = await client.patch<{ data: Booking }>(`/bookings/${id}/status`, data);
+  return response.data;
 }
 
-// ============================================================
-// STATUS ACTIONS
-// ============================================================
-
 /**
- * Cancel booking
+ * Cancel booking with reason
  */
 export async function cancelBooking(id: string, reason: string): Promise<Booking> {
   const client = getApiClient();
-  return await client.post<Booking>(`/bookings/${id}/cancel`, { reason });
+  const response = await client.post<{ data: Booking }>(`/bookings/${id}/cancel`, { reason });
+  return response.data;
 }
 
 /**
@@ -273,7 +305,8 @@ export async function cancelBooking(id: string, reason: string): Promise<Booking
  */
 export async function confirmBooking(id: string): Promise<Booking> {
   const client = getApiClient();
-  return await client.post<Booking>(`/bookings/${id}/confirm`);
+  const response = await client.post<{ data: Booking }>(`/bookings/${id}/confirm`);
+  return response.data;
 }
 
 /**
@@ -281,7 +314,8 @@ export async function confirmBooking(id: string): Promise<Booking> {
  */
 export async function startBooking(id: string): Promise<Booking> {
   const client = getApiClient();
-  return await client.post<Booking>(`/bookings/${id}/start`);
+  const response = await client.post<{ data: Booking }>(`/bookings/${id}/start`);
+  return response.data;
 }
 
 /**
@@ -289,19 +323,17 @@ export async function startBooking(id: string): Promise<Booking> {
  */
 export async function completeBooking(id: string): Promise<Booking> {
   const client = getApiClient();
-  return await client.post<Booking>(`/bookings/${id}/complete`);
+  const response = await client.post<{ data: Booking }>(`/bookings/${id}/complete`);
+  return response.data;
 }
-
-// ============================================================
-// STATISTICS
-// ============================================================
 
 /**
  * Get provider booking statistics
  */
 export async function getProviderBookingStats(): Promise<BookingStats> {
   const client = getApiClient();
-  return await client.get('/bookings/provider/stats');
+  const response = await client.get<{ data: BookingStats }>('/bookings/provider/stats');
+  return response.data;
 }
 
 /**
@@ -309,19 +341,16 @@ export async function getProviderBookingStats(): Promise<BookingStats> {
  */
 export async function getCustomerBookingStats(): Promise<BookingStats> {
   const client = getApiClient();
-  return await client.get('/bookings/customer/stats');
+  const response = await client.get<{ data: BookingStats }>('/bookings/customer/stats');
+  return response.data;
 }
-
-// ============================================================
-// VALIDATION HELPERS
-// ============================================================
 
 /**
  * Check if booking exists
  */
 export async function bookingExists(id: string): Promise<{ exists: boolean }> {
   const client = getApiClient();
-  return await client.get(`/bookings/${id}/exists`);
+  return await client.get<{ exists: boolean }>(`/bookings/${id}/exists`);
 }
 
 /**
@@ -329,7 +358,7 @@ export async function bookingExists(id: string): Promise<{ exists: boolean }> {
  */
 export async function isBookingCustomer(id: string): Promise<{ isOwner: boolean }> {
   const client = getApiClient();
-  return await client.get(`/bookings/${id}/customer-owner`);
+  return await client.get<{ isOwner: boolean }>(`/bookings/${id}/customer-owner`);
 }
 
 /**
@@ -337,7 +366,7 @@ export async function isBookingCustomer(id: string): Promise<{ isOwner: boolean 
  */
 export async function isBookingProvider(id: string): Promise<{ isOwner: boolean }> {
   const client = getApiClient();
-  return await client.get(`/bookings/${id}/provider-owner`);
+  return await client.get<{ isOwner: boolean }>(`/bookings/${id}/provider-owner`);
 }
 
 // ============================================================
@@ -345,31 +374,20 @@ export async function isBookingProvider(id: string): Promise<{ isOwner: boolean 
 // ============================================================
 
 export default {
-  // Create
   createBooking,
-
-  // Read
   getBookingById,
   getBookingByNumber,
   getCustomerBookings,
   getProviderBookings,
   getAdminBookings,
-
-  // Update
   updateBooking,
   updateBookingStatus,
-
-  // Status Actions
   cancelBooking,
   confirmBooking,
   startBooking,
   completeBooking,
-
-  // Statistics
   getProviderBookingStats,
   getCustomerBookingStats,
-
-  // Validation
   bookingExists,
   isBookingCustomer,
   isBookingProvider,
