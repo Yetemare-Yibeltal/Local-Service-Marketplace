@@ -12,36 +12,68 @@ import axios, {
 // TYPES
 // ============================================================
 
+export interface ApiClientConfig {
+  baseURL: string;
+  timeout?: number;
+  retries?: number;
+  retryDelay?: number;
+}
+
 export interface ApiResponse<T = any> {
   success: boolean;
+  message: string;
   data: T;
-  message?: string;
   errors?: string[];
   timestamp: string;
   statusCode: number;
 }
 
 export interface ApiError {
-  success: false;
   message: string;
-  errors: string[];
   statusCode: number;
-  timestamp: string;
-  path?: string;
+  errors?: string[];
+  data?: any;
 }
 
-export interface ApiRequestConfig extends AxiosRequestConfig {
-  retry?: boolean;
-  retryCount?: number;
-  maxRetries?: number;
+export interface RequestOptions extends AxiosRequestConfig {
+  retries?: number;
+  retryDelay?: number;
   skipAuth?: boolean;
   skipErrorHandler?: boolean;
 }
 
-export interface RefreshTokenResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
+// ============================================================
+// TOKEN MANAGEMENT
+// ============================================================
+
+const TOKEN_KEY = 'accessToken';
+const REFRESH_TOKEN_KEY = 'refreshToken';
+
+export function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setAccessToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function setRefreshToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(REFRESH_TOKEN_KEY, token);
+}
+
+export function clearTokens(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem('user');
 }
 
 // ============================================================
@@ -50,19 +82,19 @@ export interface RefreshTokenResponse {
 
 class ApiClient {
   private client: AxiosInstance;
-  private readonly baseURL: string;
-  private isRefreshing: boolean = false;
-  private failedQueue: Array<{
+  private config: ApiClientConfig;
+  private isRefreshing = false;
+  private pendingRequests: Array<{
     resolve: (value: any) => void;
     reject: (reason?: any) => void;
+    config: InternalAxiosRequestConfig;
   }> = [];
 
-  constructor(baseURL: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1') {
-    this.baseURL = baseURL;
-
+  constructor(config: ApiClientConfig) {
+    this.config = config;
     this.client = axios.create({
-      baseURL: this.baseURL,
-      timeout: 30000,
+      baseURL: config.baseURL,
+      timeout: config.timeout || 30000,
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
@@ -72,259 +104,238 @@ class ApiClient {
     this.setupInterceptors();
   }
 
-  // ============================================================
-  // INTERCEPTORS
-  // ============================================================
-
   private setupInterceptors(): void {
     // Request interceptor
     this.client.interceptors.request.use(
-      (config: InternalAxiosRequestConfig) => {
-        const token = this.getAccessToken();
-        if (token && !(config as ApiRequestConfig).skipAuth) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
+      this.handleRequest.bind(this),
+      this.handleRequestError.bind(this)
     );
 
     // Response interceptor
     this.client.interceptors.response.use(
-      (response: AxiosResponse) => {
-        return response;
-      },
-      async (error: AxiosError) => {
-        const originalRequest = error.config as ApiRequestConfig;
-
-        // If error is 401 and we haven't retried yet
-        if (
-          error.response?.status === 401 &&
-          !originalRequest._retry &&
-          !originalRequest.skipAuth
-        ) {
-          originalRequest._retry = true;
-
-          try {
-            const newToken = await this.refreshToken();
-            if (newToken) {
-              originalRequest.headers.Authorization = `Bearer ${newToken}`;
-              return this.client(originalRequest);
-            }
-          } catch (refreshError) {
-            // Refresh failed, redirect to login
-            this.handleAuthError();
-            return Promise.reject(refreshError);
-          }
-        }
-
-        // Handle other errors
-        return this.handleError(error);
-      }
+      this.handleResponse.bind(this),
+      this.handleResponseError.bind(this)
     );
   }
 
-  // ============================================================
-  // AUTH TOKEN MANAGEMENT
-  // ============================================================
-
-  private getAccessToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('accessToken');
+  private handleRequest(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+    const token = getAccessToken();
+    if (token && !config.headers?.['skipAuth']) {
+      config.headers = config.headers || {};
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
   }
 
-  private getRefreshToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('refreshToken');
+  private handleRequestError(error: any): Promise<any> {
+    return Promise.reject(error);
   }
 
-  private setTokens(accessToken: string, refreshToken: string): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
+  private handleResponse(response: AxiosResponse): AxiosResponse {
+    return response;
   }
 
-  private clearTokens(): void {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-  }
+  private async handleResponseError(error: AxiosError): Promise<any> {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-  // ============================================================
-  // TOKEN REFRESH
-  // ============================================================
-
-  private async refreshToken(): Promise<string | null> {
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) {
-      this.handleAuthError();
-      return null;
+    // Skip token refresh for auth endpoints
+    if (originalRequest.url?.includes('/auth/refresh')) {
+      clearTokens();
+      return Promise.reject(error);
     }
 
-    // Prevent multiple concurrent refresh requests
+    // Handle 401 Unauthorized
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshToken = getRefreshToken();
+        if (!refreshToken) {
+          clearTokens();
+          window.location.href = '/login';
+          return Promise.reject(error);
+        }
+
+        // Queue the request while refreshing
+        const newToken = await this.refreshToken(refreshToken);
+
+        if (newToken) {
+          setAccessToken(newToken);
+          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+          return this.client.request(originalRequest);
+        } else {
+          clearTokens();
+          window.location.href = '/login';
+          return Promise.reject(error);
+        }
+      } catch (refreshError) {
+        clearTokens();
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    // Handle 403 Forbidden
+    if (error.response?.status === 403) {
+      // User doesn't have permission
+      return Promise.reject(error);
+    }
+
+    // Handle 429 Too Many Requests
+    if (error.response?.status === 429) {
+      const retryAfter = parseInt(error.response.headers['retry-after'] || '5', 10) * 1000;
+      await new Promise((resolve) => setTimeout(resolve, retryAfter));
+      return this.client.request(error.config as any);
+    }
+
+    // Handle 500+ Server Errors
+    if (error.response?.status && error.response.status >= 500) {
+      // Could retry with exponential backoff
+      const retryCount = (error.config as any)?._retryCount || 0;
+      if (retryCount < 3) {
+        (error.config as any)._retryCount = retryCount + 1;
+        const delay = Math.pow(2, retryCount) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return this.client.request(error.config as any);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+
+  private async refreshToken(refreshToken: string): Promise<string | null> {
     if (this.isRefreshing) {
+      // Wait for the ongoing refresh to complete
       return new Promise((resolve, reject) => {
-        this.failedQueue.push({ resolve, reject });
+        this.pendingRequests.push({ resolve, reject, config: {} as any });
       });
     }
 
     this.isRefreshing = true;
 
     try {
-      const response = await axios.post<ApiResponse<RefreshTokenResponse>>(
-        `${this.baseURL}/auth/refresh`,
-        { refreshToken }
+      const response = await axios.post(
+        `${this.config.baseURL}/auth/refresh`,
+        { refreshToken },
+        { timeout: 10000 }
       );
 
-      if (response.data.success && response.data.data) {
-        const { accessToken, refreshToken: newRefreshToken } = response.data.data;
-        this.setTokens(accessToken, newRefreshToken);
+      const data = response.data;
+      const newToken = data.data?.accessToken;
 
-        // Process failed queue
-        this.failedQueue.forEach(({ resolve }) => resolve(accessToken));
-        this.failedQueue = [];
+      if (newToken) {
+        setAccessToken(newToken);
+        if (data.data?.refreshToken) {
+          setRefreshToken(data.data.refreshToken);
+        }
 
-        return accessToken;
+        // Resolve pending requests
+        this.pendingRequests.forEach((req) => {
+          req.resolve(newToken);
+        });
+        this.pendingRequests = [];
+
+        return newToken;
+      } else {
+        this.pendingRequests.forEach((req) => {
+          req.reject(new Error('Refresh failed'));
+        });
+        this.pendingRequests = [];
+        return null;
       }
-
-      throw new Error('Refresh failed');
     } catch (error) {
-      // Process failed queue with rejection
-      this.failedQueue.forEach(({ reject }) => reject(error));
-      this.failedQueue = [];
-      this.handleAuthError();
+      this.pendingRequests.forEach((req) => {
+        req.reject(error);
+      });
+      this.pendingRequests = [];
       return null;
     } finally {
       this.isRefreshing = false;
     }
   }
 
-  private handleAuthError(): void {
-    this.clearTokens();
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
-  }
+  // Public methods
+  public async request<T = any>(config: RequestOptions): Promise<T> {
+    const retries = config.retries || this.config.retries || 0;
+    const retryDelay = config.retryDelay || this.config.retryDelay || 1000;
+    let lastError: any;
 
-  // ============================================================
-  // ERROR HANDLING
-  // ============================================================
-
-  private handleError(error: AxiosError): Promise<never> {
-    const apiError = this.parseError(error);
-    return Promise.reject(apiError);
-  }
-
-  private parseError(error: AxiosError): ApiError {
-    const defaultError: ApiError = {
-      success: false,
-      message: 'An unexpected error occurred',
-      errors: ['An unexpected error occurred'],
-      statusCode: 500,
-      timestamp: new Date().toISOString(),
-    };
-
-    if (error.response) {
-      const data = error.response.data as any;
-      return {
-        success: false,
-        message: data?.message || defaultError.message,
-        errors: data?.errors || [defaultError.message],
-        statusCode: error.response.status,
-        timestamp: data?.timestamp || defaultError.timestamp,
-        path: data?.path || error.config?.url,
-      };
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await this.client.request<T>(config);
+        return response.data;
+      } catch (error) {
+        lastError = error;
+        if (attempt < retries && this.shouldRetry(error)) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay * Math.pow(2, attempt)));
+          continue;
+        }
+        break;
+      }
     }
 
-    if (error.request) {
-      return {
-        ...defaultError,
-        message: 'No response from server',
-        errors: ['No response from server'],
-      };
-    }
-
-    return defaultError;
+    throw lastError;
   }
 
-  // ============================================================
-  // REQUEST METHODS
-  // ============================================================
-
-  public async request<T>(config: ApiRequestConfig): Promise<T> {
-    try {
-      const response = await this.client.request<T>(config);
-      return response.data;
-    } catch (error) {
-      throw error;
+  private shouldRetry(error: any): boolean {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      // Retry on network errors, timeouts, and 5xx server errors
+      if (!error.response) return true; // Network error
+      if (status === 429) return true; // Rate limit
+      if (status && status >= 500) return true; // Server error
     }
+    return false;
   }
 
-  public async get<T>(url: string, config?: ApiRequestConfig): Promise<T> {
+  // Convenience methods
+  public get<T = any>(url: string, config?: RequestOptions): Promise<T> {
     return this.request<T>({ ...config, method: 'GET', url });
   }
 
-  public async post<T>(url: string, data?: any, config?: ApiRequestConfig): Promise<T> {
+  public post<T = any>(url: string, data?: any, config?: RequestOptions): Promise<T> {
     return this.request<T>({ ...config, method: 'POST', url, data });
   }
 
-  public async put<T>(url: string, data?: any, config?: ApiRequestConfig): Promise<T> {
+  public put<T = any>(url: string, data?: any, config?: RequestOptions): Promise<T> {
     return this.request<T>({ ...config, method: 'PUT', url, data });
   }
 
-  public async patch<T>(url: string, data?: any, config?: ApiRequestConfig): Promise<T> {
+  public patch<T = any>(url: string, data?: any, config?: RequestOptions): Promise<T> {
     return this.request<T>({ ...config, method: 'PATCH', url, data });
   }
 
-  public async delete<T>(url: string, config?: ApiRequestConfig): Promise<T> {
+  public delete<T = any>(url: string, config?: RequestOptions): Promise<T> {
     return this.request<T>({ ...config, method: 'DELETE', url });
   }
-
-  public async upload<T>(url: string, formData: FormData, config?: ApiRequestConfig): Promise<T> {
-    return this.request<T>({
-      ...config,
-      method: 'POST',
-      url,
-      data: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        ...config?.headers,
-      },
-    });
-  }
-
-  // ============================================================
-  // HELPER METHODS
-  // ============================================================
 
   public getClient(): AxiosInstance {
     return this.client;
   }
-
-  public setBaseURL(url: string): void {
-    this.client.defaults.baseURL = url;
-  }
-
-  public setDefaultHeaders(headers: Record<string, string>): void {
-    this.client.defaults.headers.common = {
-      ...this.client.defaults.headers.common,
-      ...headers,
-    };
-  }
 }
 
 // ============================================================
-// SINGLETON INSTANCE
+// INSTANCE CREATION
 // ============================================================
 
-const apiClient = new ApiClient();
+let apiClient: ApiClient | null = null;
+
+export function createApiClient(config: ApiClientConfig): ApiClient {
+  if (!apiClient) {
+    apiClient = new ApiClient(config);
+  }
+  return apiClient;
+}
+
+export function getApiClient(): ApiClient {
+  if (!apiClient) {
+    throw new Error('API client not initialized. Call createApiClient first.');
+  }
+  return apiClient;
+}
 
 // ============================================================
-// EXPORTS
+// DEFAULT EXPORT
 // ============================================================
 
-export { apiClient, ApiClient };
 export default apiClient;
