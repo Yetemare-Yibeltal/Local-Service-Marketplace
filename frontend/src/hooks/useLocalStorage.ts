@@ -1,22 +1,19 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 // ============================================================
 // TYPES
 // ============================================================
 
-export type Serializer<T> = (value: T) => string;
-export type Deserializer<T> = (value: string) => T;
+export type StorageValue<T> = T | undefined;
 
 export interface UseLocalStorageOptions<T> {
-  /** Initial value if no value exists in localStorage */
-  initialValue?: T;
-  /** Custom serializer function */
-  serializer?: Serializer<T>;
-  /** Custom deserializer function */
-  deserializer?: Deserializer<T>;
-  /** Whether to sync across tabs/windows */
+  /** Serializer function for storing value (default: JSON.stringify) */
+  serializer?: (value: T) => string;
+  /** Deserializer function for retrieving value (default: JSON.parse) */
+  deserializer?: (value: string) => T;
+  /** Whether to sync across tabs (default: true) */
   syncAcrossTabs?: boolean;
 }
 
@@ -25,212 +22,131 @@ export interface UseLocalStorageOptions<T> {
 // ============================================================
 
 /**
- * Hook that synchronizes state with localStorage
- * @param key - localStorage key
+ * Hook to sync state with localStorage
+ * @param key - The localStorage key
+ * @param initialValue - Initial value or function to get initial value
  * @param options - Configuration options
- * @returns [storedValue, setValue, removeValue, isLoaded]
+ * @returns [storedValue, setValue, removeValue] tuple
  */
 export function useLocalStorage<T>(
   key: string,
+  initialValue: T | (() => T),
   options: UseLocalStorageOptions<T> = {}
-): [T | undefined, (value: T | ((prev: T | undefined) => T)) => void, () => void, boolean] {
-  const {
-    initialValue,
-    serializer = JSON.stringify,
-    deserializer = JSON.parse,
-    syncAcrossTabs = true,
-  } = options;
+): [T, (value: T | ((prev: T) => T)) => void, () => void] {
+  const { serializer = JSON.stringify, deserializer = JSON.parse, syncAcrossTabs = true } = options;
 
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [storedValue, setStoredValue] = useState<T | undefined>(initialValue);
+  // Use ref to track if this is the first render
+  const isFirstRender = useRef(true);
 
-  // Load from localStorage on mount
-  useEffect(() => {
+  // Get initial value from localStorage or initialValue
+  const getStoredValue = useCallback((): T => {
+    if (typeof window === 'undefined') {
+      return typeof initialValue === 'function' ? (initialValue as () => T)() : initialValue;
+    }
+
     try {
-      const item = localStorage.getItem(key);
+      const item = window.localStorage.getItem(key);
       if (item !== null) {
-        setStoredValue(deserializer(item));
-      } else {
-        setStoredValue(initialValue);
+        return deserializer(item);
       }
     } catch (error) {
-      console.warn(`Error reading localStorage key "${key}":`, error);
-      setStoredValue(initialValue);
-    } finally {
-      setIsLoaded(true);
+      console.error(`Error reading localStorage key "${key}":`, error);
     }
+
+    return typeof initialValue === 'function' ? (initialValue as () => T)() : initialValue;
   }, [key, initialValue, deserializer]);
 
-  // Set value and sync to localStorage
+  const [storedValue, setStoredValue] = useState<T>(getStoredValue);
+
+  // Update localStorage when state changes
   const setValue = useCallback(
-    (value: T | ((prev: T | undefined) => T)) => {
-      setStoredValue((prev) => {
-        const newValue =
-          typeof value === 'function' ? (value as (prev: T | undefined) => T)(prev) : value;
-        try {
-          localStorage.setItem(key, serializer(newValue));
-        } catch (error) {
-          console.warn(`Error setting localStorage key "${key}":`, error);
+    (value: T | ((prev: T) => T)) => {
+      try {
+        const valueToStore = value instanceof Function ? value(storedValue) : value;
+        setStoredValue(valueToStore);
+
+        if (typeof window !== 'undefined') {
+          const serialized = serializer(valueToStore);
+          window.localStorage.setItem(key, serialized);
+
+          // Dispatch storage event for cross-tab sync
+          if (syncAcrossTabs) {
+            window.dispatchEvent(
+              new StorageEvent('storage', {
+                key,
+                newValue: serialized,
+                storageArea: window.localStorage,
+              })
+            );
+          }
         }
-        return newValue;
-      });
+      } catch (error) {
+        console.error(`Error setting localStorage key "${key}":`, error);
+      }
     },
-    [key, serializer]
+    [key, storedValue, serializer, syncAcrossTabs]
   );
 
   // Remove value from localStorage
   const removeValue = useCallback(() => {
     try {
-      localStorage.removeItem(key);
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(key);
+        if (syncAcrossTabs) {
+          window.dispatchEvent(
+            new StorageEvent('storage', {
+              key,
+              newValue: null,
+              storageArea: window.localStorage,
+            })
+          );
+        }
+      }
+      // Reset to initial value
+      const initial =
+        typeof initialValue === 'function' ? (initialValue as () => T)() : initialValue;
+      setStoredValue(initial);
     } catch (error) {
-      console.warn(`Error removing localStorage key "${key}":`, error);
+      console.error(`Error removing localStorage key "${key}":`, error);
     }
-    setStoredValue(initialValue);
-  }, [key, initialValue]);
+  }, [key, initialValue, syncAcrossTabs]);
 
-  // Sync across tabs/windows
+  // Sync across tabs
   useEffect(() => {
     if (!syncAcrossTabs) return;
 
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === key && e.newValue !== null) {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === key && event.storageArea === localStorage) {
         try {
-          setStoredValue(deserializer(e.newValue));
+          const newValue = event.newValue !== null ? deserializer(event.newValue) : null;
+          if (newValue === null) {
+            // Value was removed
+            const initial =
+              typeof initialValue === 'function' ? (initialValue as () => T)() : initialValue;
+            setStoredValue(initial);
+          } else {
+            setStoredValue(newValue);
+          }
         } catch (error) {
-          console.warn(`Error syncing localStorage key "${key}":`, error);
+          console.error(`Error syncing localStorage key "${key}" across tabs:`, error);
         }
-      } else if (e.key === key && e.newValue === null) {
-        setStoredValue(initialValue);
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, [key, deserializer, initialValue, syncAcrossTabs]);
 
-  return [storedValue, setValue, removeValue, isLoaded];
-}
+  // Initialize if value changes from another tab on mount
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      const current = getStoredValue();
+      setStoredValue(current);
+    }
+  }, [getStoredValue]);
 
-// ============================================================
-// HOOK WITH CUSTOM SERIALIZER FOR OBJECTS
-// ============================================================
-
-/**
- * Hook for storing objects with custom serialization
- */
-export function useLocalStorageObject<T extends Record<string, any>>(
-  key: string,
-  initialValue?: T
-): [T | undefined, (value: T | ((prev: T | undefined) => T)) => void, () => void, boolean] {
-  return useLocalStorage<T>(key, {
-    initialValue,
-    serializer: (val) => JSON.stringify(val, null, 2),
-    deserializer: (str) => JSON.parse(str),
-  });
-}
-
-// ============================================================
-// HOOK FOR PRIMITIVE VALUES
-// ============================================================
-
-/**
- * Hook for storing strings
- */
-export function useLocalStorageString(
-  key: string,
-  initialValue?: string
-): [
-  string | undefined,
-  (value: string | ((prev: string | undefined) => string)) => void,
-  () => void,
-  boolean,
-] {
-  return useLocalStorage<string>(key, {
-    initialValue,
-    serializer: (val) => val,
-    deserializer: (str) => str,
-  });
-}
-
-/**
- * Hook for storing numbers
- */
-export function useLocalStorageNumber(
-  key: string,
-  initialValue?: number
-): [
-  number | undefined,
-  (value: number | ((prev: number | undefined) => number)) => void,
-  () => void,
-  boolean,
-] {
-  return useLocalStorage<number>(key, {
-    initialValue,
-    serializer: (val) => String(val),
-    deserializer: (str) => Number(str),
-  });
-}
-
-/**
- * Hook for storing booleans
- */
-export function useLocalStorageBoolean(
-  key: string,
-  initialValue?: boolean
-): [
-  boolean | undefined,
-  (value: boolean | ((prev: boolean | undefined) => boolean)) => void,
-  () => void,
-  boolean,
-] {
-  return useLocalStorage<boolean>(key, {
-    initialValue,
-    serializer: (val) => String(val),
-    deserializer: (str) => str === 'true',
-  });
-}
-
-/**
- * Hook for storing arrays
- */
-export function useLocalStorageArray<T>(
-  key: string,
-  initialValue?: T[]
-): [T[] | undefined, (value: T[] | ((prev: T[] | undefined) => T[])) => void, () => void, boolean] {
-  return useLocalStorage<T[]>(key, {
-    initialValue,
-    serializer: (val) => JSON.stringify(val),
-    deserializer: (str) => JSON.parse(str),
-  });
-}
-
-// ============================================================
-// HOOK WITH VALIDATION
-// ============================================================
-
-/**
- * Hook with custom validation on load
- */
-export function useLocalStorageWithValidation<T>(
-  key: string,
-  validate: (value: any) => boolean,
-  options: UseLocalStorageOptions<T> = {}
-): [T | undefined, (value: T | ((prev: T | undefined) => T)) => void, () => void, boolean] {
-  const [storedValue, setStoredValue, removeValue, isLoaded] = useLocalStorage<T>(key, {
-    ...options,
-    deserializer: (str) => {
-      try {
-        const parsed = options.deserializer ? options.deserializer(str) : JSON.parse(str);
-        return validate(parsed) ? parsed : options.initialValue;
-      } catch {
-        return options.initialValue;
-      }
-    },
-  });
-
-  return [storedValue, setStoredValue, removeValue, isLoaded];
+  return [storedValue, setValue, removeValue];
 }
 
 // ============================================================

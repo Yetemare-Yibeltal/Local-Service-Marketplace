@@ -262,16 +262,14 @@ function ToggleSwitch({
       </div>
       <button
         onClick={() => onChange(!enabled)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
-          enabled ? 'bg-blue-600' : 'bg-gray-300'
-        }`}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-blue-600' : 'bg-gray-300'
+          }`}
         role="switch"
         aria-checked={enabled}
       >
         <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-            enabled ? 'translate-x-6' : 'translate-x-1'
-          }`}
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
         />
       </button>
     </div>
@@ -549,55 +547,50 @@ export default function SettingsPage() {
               <div className="space-y-1">
                 <button
                   onClick={() => setActiveTab('profile')}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === 'profile'
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'profile'
                       ? 'bg-blue-50 text-blue-700'
                       : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <UserIcon className="w-5 h-5" />
                   Profile
                 </button>
                 <button
                   onClick={() => setActiveTab('security')}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === 'security'
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security'
                       ? 'bg-blue-50 text-blue-700'
                       : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <LockClosedIcon className="w-5 h-5" />
                   Security
                 </button>
                 <button
                   onClick={() => setActiveTab('notifications')}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === 'notifications'
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'notifications'
                       ? 'bg-blue-50 text-blue-700'
                       : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <BellIcon className="w-5 h-5" />
                   Notifications
                 </button>
                 <button
                   onClick={() => setActiveTab('privacy')}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === 'privacy'
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'privacy'
                       ? 'bg-blue-50 text-blue-700'
                       : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <ShieldCheckIcon className="w-5 h-5" />
                   Privacy
                 </button>
                 <button
                   onClick={() => setActiveTab('danger')}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === 'danger'
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'danger'
                       ? 'bg-red-50 text-red-700'
                       : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <ExclamationTriangleIcon className="w-5 h-5" />
                   Danger
@@ -673,9 +666,8 @@ export default function SettingsPage() {
                     <input
                       type="text"
                       {...registerProfile('fullName')}
-                      className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        profileErrors.fullName ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${profileErrors.fullName ? 'border-red-500' : 'border-gray-300'
+                        }`}
                     />
                     {profileErrors.fullName && (
                       <p className="mt-1 text-sm text-red-600">{profileErrors.fullName.message}</p>
@@ -702,9 +694,8 @@ export default function SettingsPage() {
                     <input
                       type="tel"
                       {...registerProfile('phone')}
-                      className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        profileErrors.phone ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${profileErrors.phone ? 'border-red-500' : 'border-gray-300'
+                        }`}
                     />
                     {profileErrors.phone && (
                       <p className="mt-1 text-sm text-red-600">{profileErrors.phone.message}</p>
@@ -717,9 +708,8 @@ export default function SettingsPage() {
                       {...registerProfile('bio')}
                       rows={4}
                       placeholder="Tell us a bit about yourself..."
-                      className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${
-                        profileErrors.bio ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${profileErrors.bio ? 'border-red-500' : 'border-gray-300'
+                        }`}
                     />
                     {profileErrors.bio && (
                       <p className="mt-1 text-sm text-red-600">{profileErrors.bio.message}</p>
@@ -768,9 +758,8 @@ export default function SettingsPage() {
                       <input
                         type={showCurrentPassword ? 'text' : 'password'}
                         {...registerPassword('currentPassword')}
-                        className={`w-full px-4 py-2.5 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          passwordErrors.currentPassword ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-4 py-2.5 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${passwordErrors.currentPassword ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       <button
                         type="button"
@@ -797,9 +786,8 @@ export default function SettingsPage() {
                       <input
                         type={showNewPassword ? 'text' : 'password'}
                         {...registerPassword('newPassword')}
-                        className={`w-full px-4 py-2.5 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          passwordErrors.newPassword ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-4 py-2.5 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${passwordErrors.newPassword ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       <button
                         type="button"
@@ -827,9 +815,8 @@ export default function SettingsPage() {
                       <input
                         type={showConfirmPassword ? 'text' : 'password'}
                         {...registerPassword('confirmPassword')}
-                        className={`w-full px-4 py-2.5 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          passwordErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-4 py-2.5 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${passwordErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       <button
                         type="button"
