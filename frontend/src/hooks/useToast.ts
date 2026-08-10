@@ -1,6 +1,13 @@
 'use client';
 
-import { useContext, useCallback, useMemo, createContext, ReactNode } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, ReactNode } from 'react';
+import {
+  CheckCircleIcon,
+  XCircleIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 
 // ============================================================
 // TYPES
@@ -23,11 +30,11 @@ export interface ToastOptions {
 
 export interface ToastContextType {
   toasts: Toast[];
-  showToast: (message: string, type?: ToastType, options?: ToastOptions) => void;
-  showSuccess: (message: string, options?: ToastOptions) => void;
-  showError: (message: string, options?: ToastOptions) => void;
-  showWarning: (message: string, options?: ToastOptions) => void;
-  showInfo: (message: string, options?: ToastOptions) => void;
+  showToast: (message: string, type?: ToastType, options?: ToastOptions) => string;
+  showSuccess: (message: string, options?: ToastOptions) => string;
+  showError: (message: string, options?: ToastOptions) => string;
+  showWarning: (message: string, options?: ToastOptions) => string;
+  showInfo: (message: string, options?: ToastOptions) => string;
   removeToast: (id: string) => void;
   clearAll: () => void;
 }
@@ -47,103 +54,8 @@ export function useToast(): ToastContextType {
 }
 
 // ============================================================
-// PROVIDER
+// TOAST CONTAINER COMPONENT
 // ============================================================
-
-export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [idCounter, setIdCounter] = useState(0);
-
-  const generateId = useCallback(() => {
-    setIdCounter((prev) => prev + 1);
-    return `toast-${Date.now()}-${idCounter}`;
-  }, [idCounter]);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  }, []);
-
-  const showToast = useCallback((
-    message: string,
-    type: ToastType = 'info',
-    options: ToastOptions = {}
-  ) => {
-    const id = generateId();
-    const duration = options.duration ?? 5000;
-    const dismissible = options.dismissible ?? true;
-
-    setToasts((prev) => [...prev, { id, type, message, duration, dismissible }]);
-
-    // Auto-dismiss
-    if (duration > 0) {
-      setTimeout(() => {
-        removeToast(id);
-      }, duration);
-    }
-
-    return id;
-  }, [generateId, removeToast]);
-
-  const showSuccess = useCallback((message: string, options?: ToastOptions) => {
-    return showToast(message, 'success', options);
-  }, [showToast]);
-
-  const showError = useCallback((message: string, options?: ToastOptions) => {
-    return showToast(message, 'error', options);
-  }, [showToast]);
-
-  const showWarning = useCallback((message: string, options?: ToastOptions) => {
-    return showToast(message, 'warning', options);
-  }, [showToast]);
-
-  const showInfo = useCallback((message: string, options?: ToastOptions) => {
-    return showToast(message, 'info', options);
-  }, [showToast]);
-
-  const clearAll = useCallback(() => {
-    setToasts([]);
-  }, []);
-
-  const value = useMemo<ToastContextType>(() => ({
-    toasts,
-    showToast,
-    showSuccess,
-    showError,
-    showWarning,
-    showInfo,
-    removeToast,
-    clearAll,
-  }), [
-    toasts,
-    showToast,
-    showSuccess,
-    showError,
-    showWarning,
-    showInfo,
-    removeToast,
-    clearAll,
-  ]);
-
-  return (
-    <ToastContext.Provider value={value}>
-      {children}
-      <ToastContainer />
-    </ToastContext.Provider>
-  );
-}
-
-// ============================================================
-// TOAST CONTAINER
-// ============================================================
-
-import { useState, useEffect } from 'react';
-import {
-  CheckCircleIcon,
-  XCircleIcon,
-  ExclamationTriangleIcon,
-  InformationCircleIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
 
 function ToastContainer() {
   const { toasts, removeToast } = useToast();
@@ -193,11 +105,11 @@ function ToastContainer() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-md w-full">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none">
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className={`flex items-start gap-3 p-4 rounded-xl border shadow-lg animate-slide-in-right ${getBgColor(toast.type)}`}
+          className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl border shadow-lg animate-slide-in-right ${getBgColor(toast.type)}`}
           role="alert"
         >
           <div className="flex-shrink-0 mt-0.5">
@@ -222,9 +134,96 @@ function ToastContainer() {
 }
 
 // ============================================================
-// DEFAULT EXPORT
+// PROVIDER COMPONENT
 // ============================================================
 
-import { useState } from 'react';
+interface ToastProviderProps {
+  children: ReactNode;
+}
+
+export function ToastProvider({ children }: ToastProviderProps) {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [idCounter, setIdCounter] = useState(0);
+
+  const generateId = useCallback(() => {
+    setIdCounter((prev) => prev + 1);
+    return `toast-${Date.now()}-${idCounter}`;
+  }, [idCounter]);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  const showToast = useCallback((
+    message: string,
+    type: ToastType = 'info',
+    options: ToastOptions = {}
+  ): string => {
+    const id = generateId();
+    const duration = options.duration ?? 5000;
+    const dismissible = options.dismissible ?? true;
+
+    setToasts((prev) => [...prev, { id, type, message, duration, dismissible }]);
+
+    if (duration > 0) {
+      setTimeout(() => {
+        removeToast(id);
+      }, duration);
+    }
+
+    return id;
+  }, [generateId, removeToast]);
+
+  const showSuccess = useCallback((message: string, options?: ToastOptions): string => {
+    return showToast(message, 'success', options);
+  }, [showToast]);
+
+  const showError = useCallback((message: string, options?: ToastOptions): string => {
+    return showToast(message, 'error', options);
+  }, [showToast]);
+
+  const showWarning = useCallback((message: string, options?: ToastOptions): string => {
+    return showToast(message, 'warning', options);
+  }, [showToast]);
+
+  const showInfo = useCallback((message: string, options?: ToastOptions): string => {
+    return showToast(message, 'info', options);
+  }, [showToast]);
+
+  const clearAll = useCallback(() => {
+    setToasts([]);
+  }, []);
+
+  const value = useMemo<ToastContextType>(() => ({
+    toasts,
+    showToast,
+    showSuccess,
+    showError,
+    showWarning,
+    showInfo,
+    removeToast,
+    clearAll,
+  }), [
+    toasts,
+    showToast,
+    showSuccess,
+    showError,
+    showWarning,
+    showInfo,
+    removeToast,
+    clearAll,
+  ]);
+
+  return (
+    <ToastContext.Provider value={value}>
+      {children}
+      <ToastContainer />
+    </ToastContext.Provider>
+  );
+}
+
+// ============================================================
+// DEFAULT EXPORT
+// ============================================================
 
 export default useToast;
