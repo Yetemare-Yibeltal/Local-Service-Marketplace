@@ -13,7 +13,6 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
-  SaveIcon,
   GlobeAltIcon,
   ShieldCheckIcon,
   UserGroupIcon,
@@ -44,27 +43,27 @@ type SettingsMap = Record<string, any>;
 // ============================================================
 
 const generalSettingsSchema = z.object({
-  siteName: z.string().min(2, 'Site name is required'),
-  siteDescription: z.string().min(10, 'Description must be at least 10 characters'),
+  siteName: z.string().min(2, 'Site name must be at least 2 characters').max(100, 'Site name must not exceed 100 characters'),
+  siteDescription: z.string().min(10, 'Description must be at least 10 characters').max(500, 'Description must not exceed 500 characters'),
   contactEmail: z.string().email('Invalid email address'),
-  contactPhone: z.string().regex(/^(\+251|0)?[9][0-9]{8}$/, 'Invalid Ethiopian phone number'),
-  address: z.string().min(5, 'Address is required'),
+  contactPhone: z.string().min(10, 'Phone number must be at least 10 digits').regex(/^(\+251|0)?[9][0-9]{8}$/, 'Invalid Ethiopian phone number'),
+  address: z.string().min(5, 'Address must be at least 5 characters').max(200, 'Address must not exceed 200 characters'),
   timezone: z.string(),
   dateFormat: z.string(),
 });
 
 const paymentSettingsSchema = z.object({
-  commissionRate: z.number().min(0).max(100, 'Commission rate must be between 0 and 100'),
-  minPayoutAmount: z.number().min(0, 'Minimum payout amount cannot be negative'),
-  platformFeeFixed: z.number().min(0, 'Fee cannot be negative'),
+  commissionRate: z.number().min(0, 'Commission rate cannot be negative').max(100, 'Commission rate cannot exceed 100%'),
+  minPayoutAmount: z.number().min(0, 'Minimum payout cannot be negative'),
+  platformFeeFixed: z.number().min(0, 'Platform fee cannot be negative'),
   enableTelebirr: z.boolean(),
   enableChapa: z.boolean(),
-  currency: z.string(),
+  currency: z.string().min(1, 'Currency is required'),
 });
 
 const emailSettingsSchema = z.object({
   smtpHost: z.string().min(1, 'SMTP host is required'),
-  smtpPort: z.string().transform(Number).pipe(z.number().min(1, 'Invalid port')),
+  smtpPort: z.string().transform(Number).pipe(z.number().min(1, 'Invalid port').max(65535, 'Invalid port')),
   smtpUser: z.string().email('Invalid email address'),
   smtpPass: z.string().min(1, 'Password is required'),
   fromEmail: z.string().email('Invalid email address'),
@@ -135,7 +134,13 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 }
 
 async function getSettings(): Promise<SystemSetting[]> {
-  return await fetchWithAuth('/admin/settings');
+  try {
+    return await fetchWithAuth('/admin/settings');
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    // Return default settings if API fails
+    return [];
+  }
 }
 
 async function updateSetting(key: string, value: any, description?: string): Promise<SystemSetting> {
@@ -235,7 +240,7 @@ function SaveButton({
       disabled={loading}
       className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
     >
-      {loading ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <SaveIcon className="w-5 h-5" />}
+      {loading ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <CheckCircleIcon className="w-5 h-5" />}
       {loading ? 'Saving...' : 'Save Changes'}
     </button>
   );
@@ -260,10 +265,10 @@ export default function AdminSettingsPage() {
     resolver: zodResolver(generalSettingsSchema),
     defaultValues: {
       siteName: 'Service Marketplace',
-      siteDescription: 'Connecting customers with trusted professionals',
+      siteDescription: 'Connecting customers with trusted professionals in Ethiopia',
       contactEmail: 'support@marketplace.com',
       contactPhone: '+251911234567',
-      address: 'Bole, Addis Ababa, Ethiopia',
+      address: 'Bole, Rwanda Street, Addis Ababa, Ethiopia',
       timezone: 'Africa/Addis_Ababa',
       dateFormat: 'DD/MM/YYYY',
     },
@@ -329,29 +334,26 @@ export default function AdminSettingsPage() {
         });
         setSettings(map);
 
-        // Populate forms with loaded values
-        // General
+        // Populate forms with loaded values or defaults
         generalForm.reset({
           siteName: map['siteName'] || 'Service Marketplace',
-          siteDescription: map['siteDescription'] || 'Connecting customers with trusted professionals',
+          siteDescription: map['siteDescription'] || 'Connecting customers with trusted professionals in Ethiopia',
           contactEmail: map['contactEmail'] || 'support@marketplace.com',
           contactPhone: map['contactPhone'] || '+251911234567',
-          address: map['address'] || 'Bole, Addis Ababa, Ethiopia',
+          address: map['address'] || 'Bole, Rwanda Street, Addis Ababa, Ethiopia',
           timezone: map['timezone'] || 'Africa/Addis_Ababa',
           dateFormat: map['dateFormat'] || 'DD/MM/YYYY',
         });
 
-        // Payment
         paymentForm.reset({
-          commissionRate: map['commissionRate'] || 5,
-          minPayoutAmount: map['minPayoutAmount'] || 100,
-          platformFeeFixed: map['platformFeeFixed'] || 0,
+          commissionRate: map['commissionRate'] !== undefined ? Number(map['commissionRate']) : 5,
+          minPayoutAmount: map['minPayoutAmount'] !== undefined ? Number(map['minPayoutAmount']) : 100,
+          platformFeeFixed: map['platformFeeFixed'] !== undefined ? Number(map['platformFeeFixed']) : 0,
           enableTelebirr: map['enableTelebirr'] ?? true,
           enableChapa: map['enableChapa'] ?? false,
           currency: map['currency'] || 'ETB',
         });
 
-        // Email
         emailForm.reset({
           smtpHost: map['smtpHost'] || 'smtp.gmail.com',
           smtpPort: map['smtpPort'] || 587,
@@ -361,7 +363,6 @@ export default function AdminSettingsPage() {
           fromName: map['fromName'] || 'Marketplace',
         });
 
-        // Notification
         notificationForm.reset({
           enableEmailNotifications: map['enableEmailNotifications'] ?? true,
           enableSmsNotifications: map['enableSmsNotifications'] ?? true,
@@ -370,7 +371,6 @@ export default function AdminSettingsPage() {
           maxRetryAttempts: map['maxRetryAttempts'] || 3,
         });
 
-        // Feature
         featureForm.reset({
           enableUserRegistration: map['enableUserRegistration'] ?? true,
           enableProviderRegistration: map['enableProviderRegistration'] ?? true,
@@ -389,18 +389,24 @@ export default function AdminSettingsPage() {
     loadSettings();
   }, [generalForm, paymentForm, emailForm, notificationForm, featureForm]);
 
-  // Save handler
+  // Save handler for current tab
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      // Gather all form data based on active tab
       let updates: { key: string; value: any }[] = [];
 
+      // Get current form data based on active tab
       if (activeTab === 'general') {
         const data = generalForm.getValues();
+        const isValid = await generalForm.trigger();
+        if (!isValid) {
+          setError('Please fix validation errors before saving.');
+          setSaving(false);
+          return;
+        }
         updates = [
           { key: 'siteName', value: data.siteName },
           { key: 'siteDescription', value: data.siteDescription },
@@ -412,6 +418,12 @@ export default function AdminSettingsPage() {
         ];
       } else if (activeTab === 'payment') {
         const data = paymentForm.getValues();
+        const isValid = await paymentForm.trigger();
+        if (!isValid) {
+          setError('Please fix validation errors before saving.');
+          setSaving(false);
+          return;
+        }
         updates = [
           { key: 'commissionRate', value: data.commissionRate },
           { key: 'minPayoutAmount', value: data.minPayoutAmount },
@@ -422,6 +434,12 @@ export default function AdminSettingsPage() {
         ];
       } else if (activeTab === 'email') {
         const data = emailForm.getValues();
+        const isValid = await emailForm.trigger();
+        if (!isValid) {
+          setError('Please fix validation errors before saving.');
+          setSaving(false);
+          return;
+        }
         updates = [
           { key: 'smtpHost', value: data.smtpHost },
           { key: 'smtpPort', value: data.smtpPort },
@@ -432,6 +450,12 @@ export default function AdminSettingsPage() {
         ];
       } else if (activeTab === 'notifications') {
         const data = notificationForm.getValues();
+        const isValid = await notificationForm.trigger();
+        if (!isValid) {
+          setError('Please fix validation errors before saving.');
+          setSaving(false);
+          return;
+        }
         updates = [
           { key: 'enableEmailNotifications', value: data.enableEmailNotifications },
           { key: 'enableSmsNotifications', value: data.enableSmsNotifications },
@@ -441,6 +465,12 @@ export default function AdminSettingsPage() {
         ];
       } else if (activeTab === 'features') {
         const data = featureForm.getValues();
+        const isValid = await featureForm.trigger();
+        if (!isValid) {
+          setError('Please fix validation errors before saving.');
+          setSaving(false);
+          return;
+        }
         updates = [
           { key: 'enableUserRegistration', value: data.enableUserRegistration },
           { key: 'enableProviderRegistration', value: data.enableProviderRegistration },
@@ -454,12 +484,15 @@ export default function AdminSettingsPage() {
       // Save each setting
       for (const update of updates) {
         await updateSetting(update.key, update.value);
+        // Update local settings map
+        setSettings((prev) => ({ ...prev, [update.key]: update.value }));
       }
 
-      setSuccess('Settings updated successfully');
+      setSuccess('All settings saved successfully!');
       setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setSaving(false);
     }
@@ -489,7 +522,7 @@ export default function AdminSettingsPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container-custom max-w-5xl">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">System Settings</h1>
             <p className="text-gray-600 mt-0.5">Configure platform-wide settings</p>
@@ -515,256 +548,325 @@ export default function AdminSettingsPage() {
         <TabNav tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* Tab Content */}
-        <div className="mt-6 bg-white rounded-xl shadow-card p-6">
+        <div className="mt-6 bg-white rounded-xl shadow-card p-6 md:p-8">
           {/* General Settings */}
           {activeTab === 'general' && (
-            <form className="space-y-4">
+            <div className="space-y-4">
               <h2 className="text-xl font-bold text-gray-900 mb-4">General Settings</h2>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Site Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Site Name <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   {...generalForm.register('siteName')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    generalForm.formState.errors.siteName ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {generalForm.formState.errors.siteName && (
                   <p className="mt-1 text-sm text-red-600">{generalForm.formState.errors.siteName.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Site Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Site Description <span className="text-red-500">*</span>
+                </label>
                 <textarea
                   {...generalForm.register('siteDescription')}
                   rows={3}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${
+                    generalForm.formState.errors.siteDescription ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {generalForm.formState.errors.siteDescription && (
                   <p className="mt-1 text-sm text-red-600">{generalForm.formState.errors.siteDescription.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contact Email <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="email"
                   {...generalForm.register('contactEmail')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    generalForm.formState.errors.contactEmail ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {generalForm.formState.errors.contactEmail && (
                   <p className="mt-1 text-sm text-red-600">{generalForm.formState.errors.contactEmail.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contact Phone <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="tel"
                   {...generalForm.register('contactPhone')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    generalForm.formState.errors.contactPhone ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {generalForm.formState.errors.contactPhone && (
                   <p className="mt-1 text-sm text-red-600">{generalForm.formState.errors.contactPhone.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Address <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   {...generalForm.register('address')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    generalForm.formState.errors.address ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {generalForm.formState.errors.address && (
                   <p className="mt-1 text-sm text-red-600">{generalForm.formState.errors.address.message}</p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
-                <select
-                  {...generalForm.register('timezone')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="Africa/Addis_Ababa">Africa/Addis_Ababa</option>
-                  <option value="UTC">UTC</option>
-                  <option value="America/New_York">America/New_York</option>
-                  <option value="Europe/London">Europe/London</option>
-                </select>
-                {generalForm.formState.errors.timezone && (
-                  <p className="mt-1 text-sm text-red-600">{generalForm.formState.errors.timezone.message}</p>
-                )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
+                  <select
+                    {...generalForm.register('timezone')}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="Africa/Addis_Ababa">Africa/Addis_Ababa</option>
+                    <option value="UTC">UTC</option>
+                    <option value="America/New_York">America/New_York</option>
+                    <option value="Europe/London">Europe/London</option>
+                    <option value="Asia/Dubai">Asia/Dubai</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date Format</label>
+                  <select
+                    {...generalForm.register('dateFormat')}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                    <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date Format</label>
-                <select
-                  {...generalForm.register('dateFormat')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                </select>
-                {generalForm.formState.errors.dateFormat && (
-                  <p className="mt-1 text-sm text-red-600">{generalForm.formState.errors.dateFormat.message}</p>
-                )}
-              </div>
-            </form>
+            </div>
           )}
 
           {/* Payment Settings */}
           {activeTab === 'payment' && (
-            <form className="space-y-4">
+            <div className="space-y-4">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Settings</h2>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Commission Rate (%)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Commission Rate (%) <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   {...paymentForm.register('commissionRate', { valueAsNumber: true })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    paymentForm.formState.errors.commissionRate ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {paymentForm.formState.errors.commissionRate && (
                   <p className="mt-1 text-sm text-red-600">{paymentForm.formState.errors.commissionRate.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Payout Amount (ETB)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Minimum Payout Amount (ETB) <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   {...paymentForm.register('minPayoutAmount', { valueAsNumber: true })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    paymentForm.formState.errors.minPayoutAmount ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {paymentForm.formState.errors.minPayoutAmount && (
                   <p className="mt-1 text-sm text-red-600">{paymentForm.formState.errors.minPayoutAmount.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Platform Fixed Fee (ETB)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Platform Fixed Fee (ETB)
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   {...paymentForm.register('platformFeeFixed', { valueAsNumber: true })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    paymentForm.formState.errors.platformFeeFixed ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {paymentForm.formState.errors.platformFeeFixed && (
                   <p className="mt-1 text-sm text-red-600">{paymentForm.formState.errors.platformFeeFixed.message}</p>
                 )}
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
                 <select
                   {...paymentForm.register('currency')}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="ETB">ETB</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
+                  <option value="ETB">ETB (Ethiopian Birr)</option>
+                  <option value="USD">USD (US Dollar)</option>
+                  <option value="EUR">EUR (Euro)</option>
                 </select>
               </div>
-              <div className="space-y-2">
+
+              <div className="space-y-2 pt-2">
                 <ToggleSwitch
                   enabled={paymentForm.watch('enableTelebirr')}
                   onChange={(val) => paymentForm.setValue('enableTelebirr', val)}
                   label="Enable Telebirr"
-                  description="Allow customers to pay using Telebirr"
+                  description="Allow customers to pay using Telebirr mobile money"
                 />
                 <ToggleSwitch
                   enabled={paymentForm.watch('enableChapa')}
                   onChange={(val) => paymentForm.setValue('enableChapa', val)}
                   label="Enable Chapa"
-                  description="Allow customers to pay using Chapa"
+                  description="Allow customers to pay using Chapa payment gateway"
                 />
               </div>
-            </form>
+            </div>
           )}
 
           {/* Email Settings */}
           {activeTab === 'email' && (
-            <form className="space-y-4">
+            <div className="space-y-4">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Email Settings</h2>
-              <p className="text-sm text-gray-500 mb-4">Configure SMTP settings for sending emails</p>
+              <p className="text-sm text-gray-500 mb-4">Configure SMTP settings for sending transactional emails</p>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Host</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  SMTP Host <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   {...emailForm.register('smtpHost')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    emailForm.formState.errors.smtpHost ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {emailForm.formState.errors.smtpHost && (
                   <p className="mt-1 text-sm text-red-600">{emailForm.formState.errors.smtpHost.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Port</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  SMTP Port <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
                   {...emailForm.register('smtpPort')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    emailForm.formState.errors.smtpPort ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {emailForm.formState.errors.smtpPort && (
                   <p className="mt-1 text-sm text-red-600">{emailForm.formState.errors.smtpPort.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Username</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  SMTP Username <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="email"
                   {...emailForm.register('smtpUser')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    emailForm.formState.errors.smtpUser ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {emailForm.formState.errors.smtpUser && (
                   <p className="mt-1 text-sm text-red-600">{emailForm.formState.errors.smtpUser.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Password</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  SMTP Password <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="password"
                   {...emailForm.register('smtpPass')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    emailForm.formState.errors.smtpPass ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {emailForm.formState.errors.smtpPass && (
                   <p className="mt-1 text-sm text-red-600">{emailForm.formState.errors.smtpPass.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  From Email <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="email"
                   {...emailForm.register('fromEmail')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    emailForm.formState.errors.fromEmail ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {emailForm.formState.errors.fromEmail && (
                   <p className="mt-1 text-sm text-red-600">{emailForm.formState.errors.fromEmail.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  From Name <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   {...emailForm.register('fromName')}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    emailForm.formState.errors.fromName ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {emailForm.formState.errors.fromName && (
                   <p className="mt-1 text-sm text-red-600">{emailForm.formState.errors.fromName.message}</p>
                 )}
               </div>
-            </form>
+            </div>
           )}
 
           {/* Notification Settings */}
           {activeTab === 'notifications' && (
-            <form className="space-y-4">
+            <div className="space-y-4">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Notification Settings</h2>
-              <div className="space-y-2">
+
+              <div className="space-y-2 bg-gray-50 rounded-lg p-4">
                 <ToggleSwitch
                   enabled={notificationForm.watch('enableEmailNotifications')}
                   onChange={(val) => notificationForm.setValue('enableEmailNotifications', val)}
                   label="Email Notifications"
-                  description="Enable sending email notifications"
+                  description="Enable sending email notifications to users"
                 />
                 <ToggleSwitch
                   enabled={notificationForm.watch('enableSmsNotifications')}
                   onChange={(val) => notificationForm.setValue('enableSmsNotifications', val)}
                   label="SMS Notifications"
-                  description="Enable sending SMS notifications"
+                  description="Enable sending SMS notifications to users"
                 />
                 <ToggleSwitch
                   enabled={notificationForm.watch('enablePushNotifications')}
@@ -773,87 +875,99 @@ export default function AdminSettingsPage() {
                   description="Enable in-app push notifications"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Booking Reminder Hours</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Booking Reminder Hours <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
                   {...notificationForm.register('bookingReminderHours', { valueAsNumber: true })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    notificationForm.formState.errors.bookingReminderHours ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {notificationForm.formState.errors.bookingReminderHours && (
                   <p className="mt-1 text-sm text-red-600">{notificationForm.formState.errors.bookingReminderHours.message}</p>
                 )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Max Retry Attempts</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Retry Attempts <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
                   {...notificationForm.register('maxRetryAttempts', { valueAsNumber: true })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    notificationForm.formState.errors.maxRetryAttempts ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
                 {notificationForm.formState.errors.maxRetryAttempts && (
                   <p className="mt-1 text-sm text-red-600">{notificationForm.formState.errors.maxRetryAttempts.message}</p>
                 )}
               </div>
-            </form>
+            </div>
           )}
 
           {/* Feature Settings */}
           {activeTab === 'features' && (
-            <form className="space-y-4">
+            <div className="space-y-4">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Feature Flags</h2>
-              <p className="text-sm text-gray-500 mb-4">Enable or disable platform features</p>
-              <div className="space-y-2">
+              <p className="text-sm text-gray-500 mb-4">Enable or disable platform features globally</p>
+
+              <div className="space-y-2 bg-gray-50 rounded-lg p-4">
                 <ToggleSwitch
                   enabled={featureForm.watch('enableUserRegistration')}
                   onChange={(val) => featureForm.setValue('enableUserRegistration', val)}
                   label="User Registration"
-                  description="Allow new users to register"
+                  description="Allow new users to create accounts"
                 />
                 <ToggleSwitch
                   enabled={featureForm.watch('enableProviderRegistration')}
                   onChange={(val) => featureForm.setValue('enableProviderRegistration', val)}
                   label="Provider Registration"
-                  description="Allow new providers to register"
+                  description="Allow new providers to register on the platform"
                 />
                 <ToggleSwitch
                   enabled={featureForm.watch('enableReviews')}
                   onChange={(val) => featureForm.setValue('enableReviews', val)}
                   label="Reviews"
-                  description="Enable review system"
+                  description="Enable customer reviews and ratings"
                 />
                 <ToggleSwitch
                   enabled={featureForm.watch('enableDisputes')}
                   onChange={(val) => featureForm.setValue('enableDisputes', val)}
                   label="Disputes"
-                  description="Enable dispute resolution"
+                  description="Enable dispute resolution system"
                 />
                 <ToggleSwitch
                   enabled={featureForm.watch('enableAnalytics')}
                   onChange={(val) => featureForm.setValue('enableAnalytics', val)}
                   label="Analytics"
-                  description="Enable analytics tracking"
+                  description="Enable analytics and reporting features"
                 />
-                <div className="pt-3 border-t border-red-200">
-                  <ToggleSwitch
-                    enabled={featureForm.watch('maintenanceMode')}
-                    onChange={(val) => featureForm.setValue('maintenanceMode', val)}
-                    label="Maintenance Mode"
-                    description="Put the platform in maintenance mode (only admins can access)"
-                  />
-                </div>
               </div>
-            </form>
+
+              <div className="pt-2 border-t-2 border-red-200">
+                <ToggleSwitch
+                  enabled={featureForm.watch('maintenanceMode')}
+                  onChange={(val) => featureForm.setValue('maintenanceMode', val)}
+                  label="Maintenance Mode"
+                  description="Put the platform in maintenance mode (only administrators can access)"
+                />
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Save Button (bottom) */}
+        {/* Bottom Save Button */}
         <div className="mt-6 flex justify-end">
           <SaveButton loading={saving} onClick={handleSave} />
         </div>
 
-        {/* Back to Admin Dashboard */}
-        <div className="mt-6 text-center">
+        {/* Back Link */}
+        <div className="mt-4 text-center">
           <Link
             href="/dashboard/admin"
             className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
@@ -863,17 +977,5 @@ export default function AdminSettingsPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-// ============================================================
-// Helper Icon
-// ============================================================
-
-function SaveIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.75V16.5L12 14.25L7.5 16.5V3.75m9 0H18A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6A2.25 2.25 0 016 3.75h1.5m9 0h-9" />
-    </svg>
   );
 }
