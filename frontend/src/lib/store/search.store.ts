@@ -514,8 +514,5 @@ export const selectIsSearching = (state: SearchStore) => state.isSearching;
 export const selectSearchError = (state: SearchStore) => state.error;
 export const selectIsHistoryLoading = (state: SearchStore) => state.isHistoryLoading;
 
-// ============================================================
-// DEFAULT EXPORT
-// ============================================================
 
 export default useSearchStore;
