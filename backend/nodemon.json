@@ -1,0 +1,22 @@
+{
+  "watch": ["src"],
+  "ext": "ts,js,json",
+  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts", "node_modules", "dist"],
+  "exec": "ts-node --transpile-only src/index.ts",
+  "env": {
+    "NODE_ENV": "development",
+    "PORT": "5000"
+  },
+  "signal": "SIGTERM",
+  "delay": 1000,
+  "verbose": false,
+  "events": {
+    "restart": "echo '🔄 Server restarting...'",
+    "start": "echo '🚀 Server started...'",
+    "crash": "echo '❌ Server crashed!'"
+  },
+  "legacyWatch": false,
+  "pollingInterval": 0,
+  "stdin": true,
+  "runOnChangeOnly": false
+}
