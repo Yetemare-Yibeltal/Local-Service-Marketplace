@@ -2,225 +2,530 @@ import winston from "winston";
 import path from "path";
 import fs from "fs";
 import env from "../config/env";
+import { createModuleLogger as createWinstonModuleLogger } from "../config/logger";
 
 // ============================================================
-// LOGGER CONFIGURATION
+// TYPES
 // ============================================================
 
-// Create logs directory if it doesn't exist
-const logDir = path.join(process.cwd(), "logs");
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
+export interface LogMeta {
+  [key: string]: any;
 }
 
-// Define log formats
-const logFormat = winston.format.combine(
-  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-  winston.format.errors({ stack: true }),
-  winston.format.splat(),
-  winston.format.json(),
-);
+export interface LogOptions {
+  module?: string;
+  correlationId?: string;
+  userId?: string;
+  requestId?: string;
+  metadata?: LogMeta;
+}
 
-// Console format for development with colors
-const consoleFormat = winston.format.combine(
-  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-  winston.format.colorize({ all: true }),
-  winston.format.printf(({ level, message, timestamp, stack, ...meta }) => {
-    let log = `${timestamp} [${level}] ${message}`;
+export interface LogEntry {
+  level: "error" | "warn" | "info" | "debug" | "http";
+  message: string;
+  timestamp: string;
+  module?: string;
+  correlationId?: string;
+  userId?: string;
+  requestId?: string;
+  metadata?: LogMeta;
+  stack?: string;
+}
 
-    // Add stack trace for errors
-    if (stack) {
-      log += `\n${stack}`;
-    }
+// ============================================================
+// CONSTANTS
+// ============================================================
 
-    // Add additional metadata if present
-    if (Object.keys(meta).length > 0) {
-      const metaString = JSON.stringify(meta, null, 2);
-      if (metaString !== "{}") {
-        log += `\n${metaString}`;
-      }
-    }
+/**
+ * Log levels with priorities
+ */
+export const LOG_LEVELS = {
+  ERROR: "error",
+  WARN: "warn",
+  INFO: "info",
+  HTTP: "http",
+  DEBUG: "debug",
+} as const;
 
-    return log;
-  }),
-);
+export type LogLevel = (typeof LOG_LEVELS)[keyof typeof LOG_LEVELS];
 
-// Define log levels
-const levels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  http: 3,
-  debug: 4,
+/**
+ * Log level priorities (higher number = more severe)
+ */
+export const LOG_PRIORITY: Record<LogLevel, number> = {
+  error: 5,
+  warn: 4,
+  info: 3,
+  http: 2,
+  debug: 1,
 };
 
-// Define log level based on environment
-const getLogLevel = (): string => {
-  switch (env.NODE_ENV) {
-    case "production":
-      return "info";
-    case "test":
-      return "error";
-    default:
-      return "debug";
-  }
-};
+// ============================================================
+// MAIN LOGGER
+// ============================================================
 
-// Create logger instance
-const logger = winston.createLogger({
-  level: getLogLevel(),
-  levels,
-  format: logFormat,
-  transports: [],
-  exitOnError: false,
+/**
+ * Main logger instance
+ */
+const loggerInstance = winston.createLogger({
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json(),
+  ),
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple(),
+      ),
+    }),
+  ],
 });
 
-// Add transports based on environment
-
-// Console transport for all environments
-logger.add(
-  new winston.transports.Console({
-    format: consoleFormat,
-    handleExceptions: true,
-  }),
-);
-
-// File transport for production and development
-if (env.NODE_ENV !== "test") {
-  // Error log file
-  logger.add(
-    new winston.transports.File({
-      filename: path.join(logDir, "error.log"),
-      level: "error",
-      format: logFormat,
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-      handleExceptions: true,
-    }),
-  );
-
-  // Combined log file
-  logger.add(
-    new winston.transports.File({
-      filename: path.join(logDir, "combined.log"),
-      format: logFormat,
-      maxsize: 10485760, // 10MB
-      maxFiles: 5,
-    }),
-  );
-
-  // HTTP request log file
-  logger.add(
-    new winston.transports.File({
-      filename: path.join(logDir, "http.log"),
-      level: "http",
-      format: logFormat,
-      maxsize: 5242880, // 5MB
-      maxFiles: 3,
-    }),
-  );
-}
-
 // ============================================================
-// CUSTOM LOGGER METHODS
+// LOGGING FUNCTIONS
 // ============================================================
 
 /**
- * Log with metadata
+ * Log an error message
  */
-export function logWithMeta(
-  level: "error" | "warn" | "info" | "http" | "debug",
-  message: string,
-  meta: Record<string, any> = {},
-): void {
-  logger.log(level, message, meta);
+export function logError(message: string, options: LogOptions = {}): void {
+  loggerInstance.error(message, {
+    module: options.module,
+    correlationId: options.correlationId,
+    userId: options.userId,
+    requestId: options.requestId,
+    ...options.metadata,
+  });
 }
 
 /**
- * Log an error with stack trace
+ * Log a warning message
  */
-export function logError(
-  error: Error | string,
-  meta: Record<string, any> = {},
-): void {
-  if (error instanceof Error) {
-    logger.error(error.message, { ...meta, stack: error.stack });
-  } else {
-    logger.error(error, meta);
-  }
+export function logWarn(message: string, options: LogOptions = {}): void {
+  loggerInstance.warn(message, {
+    module: options.module,
+    correlationId: options.correlationId,
+    userId: options.userId,
+    requestId: options.requestId,
+    ...options.metadata,
+  });
+}
+
+/**
+ * Log an info message
+ */
+export function logInfo(message: string, options: LogOptions = {}): void {
+  loggerInstance.info(message, {
+    module: options.module,
+    correlationId: options.correlationId,
+    userId: options.userId,
+    requestId: options.requestId,
+    ...options.metadata,
+  });
+}
+
+/**
+ * Log a debug message
+ */
+export function logDebug(message: string, options: LogOptions = {}): void {
+  loggerInstance.debug(message, {
+    module: options.module,
+    correlationId: options.correlationId,
+    userId: options.userId,
+    requestId: options.requestId,
+    ...options.metadata,
+  });
 }
 
 /**
  * Log an HTTP request
  */
-export function logHttp(
-  method: string,
-  url: string,
-  statusCode: number,
-  responseTime: number,
-  meta: Record<string, any> = {},
-): void {
-  logger.http(`${method} ${url} ${statusCode} ${responseTime}ms`, {
-    method,
-    url,
-    statusCode,
-    responseTime,
-    ...meta,
+export function logHttp(message: string, options: LogOptions = {}): void {
+  loggerInstance.http(message, {
+    module: options.module || "http",
+    correlationId: options.correlationId,
+    userId: options.userId,
+    requestId: options.requestId,
+    ...options.metadata,
   });
 }
 
 /**
- * Log with a specific correlation ID for request tracing
+ * Log with dynamic level
  */
-export function logWithCorrelation(
-  correlationId: string,
-  level: "error" | "warn" | "info" | "http" | "debug",
+export function log(
+  level: LogLevel,
   message: string,
-  meta: Record<string, any> = {},
+  options: LogOptions = {},
 ): void {
-  logger.log(level, message, { ...meta, correlationId });
+  const logFn = {
+    error: logError,
+    warn: logWarn,
+    info: logInfo,
+    http: logHttp,
+    debug: logDebug,
+  };
+
+  const fn = logFn[level];
+  if (fn) {
+    fn(message, options);
+  }
 }
 
 // ============================================================
-// CHILD LOGGER FOR MODULES
+// CHILD LOGGER
 // ============================================================
 
 /**
- * Create a child logger with default metadata
+ * Create a child logger with preset metadata
  */
 export function createChildLogger(
   module: string,
-  meta: Record<string, any> = {},
-) {
+  defaultOptions: Partial<LogOptions> = {},
+): {
+  error: (message: string, options?: LogOptions) => void;
+  warn: (message: string, options?: LogOptions) => void;
+  info: (message: string, options?: LogOptions) => void;
+  debug: (message: string, options?: LogOptions) => void;
+  http: (message: string, options?: LogOptions) => void;
+  log: (level: LogLevel, message: string, options?: LogOptions) => void;
+  child: (name: string) => any;
+} {
+  const childOptions: LogOptions = {
+    module,
+    ...defaultOptions,
+  };
+
   return {
-    error: (message: string, extra: Record<string, any> = {}) =>
-      logger.error(message, { module, ...meta, ...extra }),
-    warn: (message: string, extra: Record<string, any> = {}) =>
-      logger.warn(message, { module, ...meta, ...extra }),
-    info: (message: string, extra: Record<string, any> = {}) =>
-      logger.info(message, { module, ...meta, ...extra }),
-    http: (message: string, extra: Record<string, any> = {}) =>
-      logger.http(message, { module, ...meta, ...extra }),
-    debug: (message: string, extra: Record<string, any> = {}) =>
-      logger.debug(message, { module, ...meta, ...extra }),
+    error: (message: string, options: LogOptions = {}) => {
+      logError(message, { ...childOptions, ...options });
+    },
+    warn: (message: string, options: LogOptions = {}) => {
+      logWarn(message, { ...childOptions, ...options });
+    },
+    info: (message: string, options: LogOptions = {}) => {
+      logInfo(message, { ...childOptions, ...options });
+    },
+    debug: (message: string, options: LogOptions = {}) => {
+      logDebug(message, { ...childOptions, ...options });
+    },
+    http: (message: string, options: LogOptions = {}) => {
+      logHttp(message, { ...childOptions, ...options });
+    },
+    log: (level: LogLevel, message: string, options: LogOptions = {}) => {
+      log(level, message, { ...childOptions, ...options });
+    },
+    child: (name: string) =>
+      createChildLogger(`${module}:${name}`, defaultOptions),
   };
 }
 
 // ============================================================
-// LOGGER CLEANUP
+// CONTEXT LOGGING
 // ============================================================
 
 /**
- * Close logger streams gracefully
+ * Log with correlation ID context
  */
-export function closeLogger(): void {
-  logger.close();
+export function logWithCorrelation(
+  correlationId: string,
+  level: LogLevel,
+  message: string,
+  options: Omit<LogOptions, "correlationId"> = {},
+): void {
+  log(level, message, {
+    correlationId,
+    ...options,
+  });
+}
+
+/**
+ * Log with user context
+ */
+export function logWithUser(
+  userId: string,
+  level: LogLevel,
+  message: string,
+  options: Omit<LogOptions, "userId"> = {},
+): void {
+  log(level, message, {
+    userId,
+    ...options,
+  });
+}
+
+/**
+ * Log with request context
+ */
+export function logWithRequest(
+  requestId: string,
+  level: LogLevel,
+  message: string,
+  options: Omit<LogOptions, "requestId"> = {},
+): void {
+  log(level, message, {
+    requestId,
+    ...options,
+  });
+}
+
+// ============================================================
+// PERFORMANCE LOGGING
+// ============================================================
+
+/**
+ * Start a performance timer
+ */
+export function startPerformanceTimer(): { start: number; end: () => number } {
+  const start = Date.now();
+  return {
+    start,
+    end: () => Date.now() - start,
+  };
+}
+
+/**
+ * Log performance metrics
+ */
+export function logPerformance(
+  operation: string,
+  duration: number,
+  options: LogOptions = {},
+): void {
+  logInfo(`Performance: ${operation} completed in ${duration}ms`, {
+    ...options,
+    metadata: {
+      ...options.metadata,
+      performance: {
+        operation,
+        duration,
+        timestamp: new Date().toISOString(),
+      },
+    },
+  });
+}
+
+/**
+ * Measure and log execution time of a function
+ */
+export async function measureTime<T>(
+  operation: string,
+  fn: () => Promise<T>,
+  options: LogOptions = {},
+): Promise<T> {
+  const timer = startPerformanceTimer();
+  try {
+    const result = await fn();
+    const duration = timer.end();
+    logPerformance(operation, duration, options);
+    return result;
+  } catch (error) {
+    const duration = timer.end();
+    logError(`Performance: ${operation} failed after ${duration}ms`, {
+      ...options,
+      metadata: {
+        ...options.metadata,
+        performance: {
+          operation,
+          duration,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      },
+    });
+    throw error;
+  }
+}
+
+/**
+ * Measure sync function execution time
+ */
+export function measureTimeSync<T>(
+  operation: string,
+  fn: () => T,
+  options: LogOptions = {},
+): T {
+  const timer = startPerformanceTimer();
+  try {
+    const result = fn();
+    const duration = timer.end();
+    logPerformance(operation, duration, options);
+    return result;
+  } catch (error) {
+    const duration = timer.end();
+    logError(`Performance: ${operation} failed after ${duration}ms`, {
+      ...options,
+      metadata: {
+        ...options.metadata,
+        performance: {
+          operation,
+          duration,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      },
+    });
+    throw error;
+  }
+}
+
+// ============================================================
+// STRUCTURED LOGGING
+// ============================================================
+
+/**
+ * Create a structured log entry
+ */
+export function createLogEntry(
+  level: LogLevel,
+  message: string,
+  options: LogOptions = {},
+): LogEntry {
+  const entry: LogEntry = {
+    level,
+    message,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (options.module) entry.module = options.module;
+  if (options.correlationId) entry.correlationId = options.correlationId;
+  if (options.userId) entry.userId = options.userId;
+  if (options.requestId) entry.requestId = options.requestId;
+  if (options.metadata) entry.metadata = options.metadata;
+
+  return entry;
+}
+
+/**
+ * Log structured data
+ */
+export function logStructured(
+  level: LogLevel,
+  message: string,
+  data: any,
+  options: LogOptions = {},
+): void {
+  const metadata = {
+    ...options.metadata,
+    structuredData: data,
+  };
+
+  log(level, message, {
+    ...options,
+    metadata,
+  });
+}
+
+// ============================================================
+// LOG LEVEL MANAGEMENT
+// ============================================================
+
+/**
+ * Get current log level
+ */
+export function getLogLevel(): string {
+  return loggerInstance.level;
+}
+
+/**
+ * Set log level
+ */
+export function setLogLevel(level: LogLevel): void {
+  loggerInstance.level = level;
+  loggerInstance.transports.forEach((transport) => {
+    transport.level = level;
+  });
+}
+
+/**
+ * Check if log level is enabled
+ */
+export function isLogLevelEnabled(level: LogLevel): boolean {
+  const current = LOG_PRIORITY[getLogLevel() as LogLevel] || 3;
+  const target = LOG_PRIORITY[level] || 3;
+  return target >= current;
+}
+
+// ============================================================
+// LOG FILE MANAGEMENT
+// ============================================================
+
+/**
+ * Get log file path
+ */
+export function getLogFilePath(filename: string = "app.log"): string {
+  const logDir = path.join(process.cwd(), "logs");
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  return path.join(logDir, filename);
+}
+
+/**
+ * Clear log files
+ */
+export function clearLogFiles(): void {
+  const logDir = path.join(process.cwd(), "logs");
+  if (fs.existsSync(logDir)) {
+    const files = fs.readdirSync(logDir);
+    for (const file of files) {
+      if (file.endsWith(".log")) {
+        fs.unlinkSync(path.join(logDir, file));
+      }
+    }
+  }
 }
 
 // ============================================================
 // EXPORTS
 // ============================================================
 
-export { logger };
+export default {
+  // Types
+  LogMeta,
+  LogOptions,
+  LogEntry,
+  LogLevel,
 
-export default logger;
+  // Constants
+  LOG_LEVELS,
+  LOG_PRIORITY,
+
+  // Main logging functions
+  logError,
+  logWarn,
+  logInfo,
+  logDebug,
+  logHttp,
+  log,
+
+  // Child logger
+  createChildLogger,
+
+  // Context logging
+  logWithCorrelation,
+  logWithUser,
+  logWithRequest,
+
+  // Performance logging
+  startPerformanceTimer,
+  logPerformance,
+  measureTime,
+  measureTimeSync,
+
+  // Structured logging
+  createLogEntry,
+  logStructured,
+
+  // Log level management
+  getLogLevel,
+  setLogLevel,
+  isLogLevelEnabled,
+
+  // Log file management
+  getLogFilePath,
+  clearLogFiles,
+
+  // The logger instance
+  logger: loggerInstance,
+};
