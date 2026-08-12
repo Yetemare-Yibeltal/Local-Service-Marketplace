@@ -13,9 +13,6 @@ const router = Router();
 // API VERSION INFORMATION
 // ============================================================
 
-/**
- * API version information
- */
 const API_INFO = {
   name: "Local Service Provider Marketplace API",
   version: "1.0.0",
