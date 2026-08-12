@@ -8,7 +8,7 @@
 // ============================================================
 
 /**
- * Coordinates interface
+ * Coordinate interface
  */
 export interface Coordinates {
   lat: number;
@@ -19,12 +19,12 @@ export interface Coordinates {
  * Address interface
  */
 export interface Address {
-  street?: string;
-  city?: string;
+  street: string;
+  city: string;
+  subCity?: string;
   state?: string;
   country?: string;
   postalCode?: string;
-  formatted?: string;
   coordinates?: Coordinates;
 }
 
@@ -39,6 +39,41 @@ export interface DistanceResult {
 }
 
 /**
+ * Geocode result
+ */
+export interface GeocodeResult {
+  address: string;
+  coordinates: Coordinates;
+  placeId?: string;
+  formattedAddress?: string;
+  confidence?: number;
+}
+
+/**
+ * Reverse geocode result
+ */
+export interface ReverseGeocodeResult extends GeocodeResult {
+  street: string;
+  city: string;
+  subCity: string | null;
+  state: string;
+  country: string;
+  postalCode: string | null;
+}
+
+/**
+ * Location search result
+ */
+export interface LocationSearchResult {
+  id: string;
+  name: string;
+  address: string;
+  coordinates: Coordinates;
+  distance: number;
+  category?: string;
+}
+
+/**
  * Bounding box
  */
 export interface BoundingBox {
@@ -46,17 +81,6 @@ export interface BoundingBox {
   maxLat: number;
   minLng: number;
   maxLng: number;
-}
-
-/**
- * Location search result
- */
-export interface LocationSearchResult {
-  address: string;
-  coordinates: Coordinates;
-  placeId?: string;
-  type?: string;
-  confidence?: number;
 }
 
 // ============================================================
@@ -71,7 +95,7 @@ export const EARTH_RADIUS_KM = 6371;
 /**
  * Earth's radius in miles
  */
-export const EARTH_RADIUS_MI = 3959;
+export const EARTH_RADIUS_MILES = 3959;
 
 /**
  * Default coordinates (Addis Ababa, Ethiopia)
@@ -82,111 +106,33 @@ export const DEFAULT_COORDINATES: Coordinates = {
 };
 
 /**
- * Ethiopian cities coordinates
+ * Ethiopian cities with coordinates
  */
 export const ETHIOPIAN_CITIES: Record<string, Coordinates> = {
-  "addis ababa": { lat: 9.03, lng: 38.74 },
-  "bahir dar": { lat: 11.6, lng: 37.38 },
-  "dire dawa": { lat: 9.6, lng: 41.85 },
-  mekelle: { lat: 13.5, lng: 39.47 },
-  gondar: { lat: 12.6, lng: 37.47 },
-  hawassa: { lat: 7.05, lng: 38.48 },
-  jimma: { lat: 7.67, lng: 36.83 },
-  adama: { lat: 8.55, lng: 39.27 },
-  harar: { lat: 9.31, lng: 42.12 },
-  dessie: { lat: 11.13, lng: 39.63 },
-  "debre markos": { lat: 10.33, lng: 37.73 },
-  "debre berhan": { lat: 9.68, lng: 39.53 },
-  asosa: { lat: 10.07, lng: 34.53 },
-  gambela: { lat: 8.25, lng: 34.58 },
-  jijiga: { lat: 9.35, lng: 42.8 },
-  shashamane: { lat: 7.2, lng: 38.6 },
-  "wolaita sodo": { lat: 6.85, lng: 37.77 },
-  "arba minch": { lat: 6.03, lng: 37.55 },
-  batu: { lat: 7.94, lng: 38.7 },
-  bishoftu: { lat: 8.75, lng: 38.98 },
+  "Addis Ababa": { lat: 9.03, lng: 38.74 },
+  "Bahir Dar": { lat: 11.6, lng: 37.38 },
+  Gondar: { lat: 12.6, lng: 37.47 },
+  Mekelle: { lat: 13.5, lng: 39.47 },
+  Dessie: { lat: 11.13, lng: 39.63 },
+  "Dire Dawa": { lat: 9.6, lng: 41.87 },
+  Harar: { lat: 9.31, lng: 42.12 },
+  Jimma: { lat: 7.67, lng: 36.83 },
+  Adama: { lat: 8.54, lng: 39.27 },
+  Hawassa: { lat: 7.05, lng: 38.48 },
+  "Arba Minch": { lat: 6.04, lng: 37.55 },
+  Jijiga: { lat: 9.35, lng: 42.8 },
+  "Debre Birhan": { lat: 9.68, lng: 39.53 },
+  "Debre Tabor": { lat: 11.85, lng: 38.01 },
+  "Debre Markos": { lat: 10.34, lng: 37.73 },
+  Nekemte: { lat: 9.08, lng: 36.55 },
+  Gambela: { lat: 8.25, lng: 34.58 },
+  Assosa: { lat: 10.07, lng: 34.53 },
+  Semera: { lat: 11.79, lng: 41.01 },
+  Adigrat: { lat: 14.27, lng: 39.46 },
+  Adwa: { lat: 14.16, lng: 38.9 },
+  Axum: { lat: 14.12, lng: 38.72 },
+  Lalibela: { lat: 12.03, lng: 39.04 },
 };
-
-// ============================================================
-// DISTANCE CALCULATION
-// ============================================================
-
-/**
- * Calculate distance between two coordinates using Haversine formula
- */
-export function calculateDistance(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number,
-  unit: "km" | "mi" = "km",
-): number {
-  const radius = unit === "km" ? EARTH_RADIUS_KM : EARTH_RADIUS_MI;
-
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return radius * c;
-}
-
-/**
- * Calculate distance between two coordinate objects
- */
-export function calculateDistanceBetween(
-  origin: Coordinates,
-  destination: Coordinates,
-  unit: "km" | "mi" = "km",
-): number {
-  return calculateDistance(
-    origin.lat,
-    origin.lng,
-    destination.lat,
-    destination.lng,
-    unit,
-  );
-}
-
-/**
- * Calculate estimated travel time based on distance
- */
-export function calculateTravelTime(
-  distance: number,
-  speed: number = 30, // km/h average speed
-  unit: "km" | "mi" = "km",
-): number {
-  const speedInUnit = unit === "km" ? speed : speed * 1.60934;
-  const timeInHours = distance / speedInUnit;
-  return timeInHours * 60; // Return in minutes
-}
-
-/**
- * Get distance and estimated travel time
- */
-export function getDistanceAndTime(
-  origin: Coordinates,
-  destination: Coordinates,
-  speed: number = 30,
-  unit: "km" | "mi" = "km",
-): DistanceResult {
-  const distance = calculateDistanceBetween(origin, destination, unit);
-  const duration = calculateTravelTime(distance, speed, unit);
-
-  return {
-    distance,
-    duration,
-    origin,
-    destination,
-  };
-}
 
 // ============================================================
 // COORDINATE VALIDATION
@@ -196,14 +142,26 @@ export function getDistanceAndTime(
  * Validate latitude
  */
 export function isValidLatitude(lat: number): boolean {
-  return typeof lat === "number" && !isNaN(lat) && lat >= -90 && lat <= 90;
+  return (
+    typeof lat === "number" &&
+    lat >= -90 &&
+    lat <= 90 &&
+    !isNaN(lat) &&
+    isFinite(lat)
+  );
 }
 
 /**
  * Validate longitude
  */
 export function isValidLongitude(lng: number): boolean {
-  return typeof lng === "number" && !isNaN(lng) && lng >= -180 && lng <= 180;
+  return (
+    typeof lng === "number" &&
+    lng >= -180 &&
+    lng <= 180 &&
+    !isNaN(lng) &&
+    isFinite(lng)
+  );
 }
 
 /**
@@ -214,15 +172,84 @@ export function isValidCoordinates(coords: Coordinates): boolean {
 }
 
 /**
- * Validate coordinates with strict check
+ * Validate address
  */
-export function isValidCoordinatesStrict(coords: Coordinates): boolean {
-  if (!isValidCoordinates(coords)) return false;
-
-  // Additional checks for Ethiopian region (optional)
-  // const isInEthiopia = coords.lat >= 3 && coords.lat <= 15 && coords.lng >= 33 && coords.lng <= 48;
-
+export function isValidAddress(address: Address): boolean {
+  if (!address) return false;
+  if (!address.street || address.street.trim().length < 2) return false;
+  if (!address.city || address.city.trim().length < 2) return false;
   return true;
+}
+
+// ============================================================
+// DISTANCE CALCULATION
+// ============================================================
+
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ */
+export function calculateDistance(
+  coord1: Coordinates,
+  coord2: Coordinates,
+  unit: "km" | "miles" = "km",
+): number {
+  if (!isValidCoordinates(coord1) || !isValidCoordinates(coord2)) {
+    throw new Error("Invalid coordinates");
+  }
+
+  const radius = unit === "km" ? EARTH_RADIUS_KM : EARTH_RADIUS_MILES;
+
+  const dLat = toRadians(coord2.lat - coord1.lat);
+  const dLng = toRadians(coord2.lng - coord1.lng);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(coord1.lat)) *
+      Math.cos(toRadians(coord2.lat)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return radius * c;
+}
+
+/**
+ * Calculate distance with estimated duration (assuming average speed)
+ */
+export function calculateDistanceWithDuration(
+  coord1: Coordinates,
+  coord2: Coordinates,
+  averageSpeedKmh: number = 30,
+): DistanceResult {
+  const distance = calculateDistance(coord1, coord2, "km");
+  const duration = (distance / averageSpeedKmh) * 60;
+
+  return {
+    distance,
+    duration,
+    origin: coord1,
+    destination: coord2,
+  };
+}
+
+/**
+ * Calculate distance between multiple points
+ */
+export function calculateTotalDistance(
+  points: Coordinates[],
+  unit: "km" | "miles" = "km",
+): number {
+  if (!points || points.length < 2) {
+    return 0;
+  }
+
+  let total = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    total += calculateDistance(points[i], points[i + 1], unit);
+  }
+
+  return total;
 }
 
 // ============================================================
@@ -230,27 +257,38 @@ export function isValidCoordinatesStrict(coords: Coordinates): boolean {
 // ============================================================
 
 /**
- * Calculate bounding box from center and radius
+ * Create bounding box from coordinates
  */
-export function getBoundingBox(
-  center: Coordinates,
-  radiusKm: number,
+export function createBoundingBox(
+  coordinates: Coordinates[],
+  paddingKm: number = 1,
 ): BoundingBox {
-  const lat = center.lat;
-  const lng = center.lng;
+  if (!coordinates || coordinates.length === 0) {
+    throw new Error("At least one coordinate is required");
+  }
 
-  // Approximate degrees per kilometer
-  const latDegPerKm = 1 / 111.32;
-  const lngDegPerKm = 1 / (111.32 * Math.cos((lat * Math.PI) / 180));
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
 
-  const latDelta = radiusKm * latDegPerKm;
-  const lngDelta = radiusKm * lngDegPerKm;
+  for (const coord of coordinates) {
+    if (coord.lat < minLat) minLat = coord.lat;
+    if (coord.lat > maxLat) maxLat = coord.lat;
+    if (coord.lng < minLng) minLng = coord.lng;
+    if (coord.lng > maxLng) maxLng = coord.lng;
+  }
+
+  // Add padding
+  const latPadding = paddingKm / 111; // 1 degree ≈ 111 km
+  const lngPadding =
+    paddingKm / (111 * Math.cos(toRadians((minLat + maxLat) / 2)));
 
   return {
-    minLat: lat - latDelta,
-    maxLat: lat + latDelta,
-    minLng: lng - lngDelta,
-    maxLng: lng + lngDelta,
+    minLat: minLat - latPadding,
+    maxLat: maxLat + latPadding,
+    minLng: minLng - lngPadding,
+    maxLng: maxLng + lngPadding,
   };
 }
 
@@ -270,80 +308,224 @@ export function isWithinBoundingBox(
 }
 
 /**
- * Check if coordinates are within a radius
+ * Get center of bounding box
  */
-export function isWithinRadius(
-  point: Coordinates,
-  center: Coordinates,
-  radiusKm: number,
-): boolean {
-  const distance = calculateDistanceBetween(point, center);
-  return distance <= radiusKm;
+export function getBoundingBoxCenter(bbox: BoundingBox): Coordinates {
+  return {
+    lat: (bbox.minLat + bbox.maxLat) / 2,
+    lng: (bbox.minLng + bbox.maxLng) / 2,
+  };
 }
 
 // ============================================================
-// ADDRESS FORMATTING
+// SEARCH HELPERS
 // ============================================================
 
 /**
- * Format address string
+ * Filter coordinates within radius
+ */
+export function filterWithinRadius(
+  points: { coordinates: Coordinates; data?: any }[],
+  center: Coordinates,
+  radiusKm: number,
+): { coordinates: Coordinates; data?: any; distance: number }[] {
+  if (!points || points.length === 0) {
+    return [];
+  }
+
+  return points
+    .map((item) => {
+      const distance = calculateDistance(center, item.coordinates, "km");
+      return {
+        ...item,
+        distance,
+      };
+    })
+    .filter((item) => item.distance <= radiusKm)
+    .sort((a, b) => a.distance - b.distance);
+}
+
+/**
+ * Get nearest point
+ */
+export function findNearestPoint(
+  points: { coordinates: Coordinates; data?: any }[],
+  center: Coordinates,
+): { coordinates: Coordinates; data?: any; distance: number } | null {
+  if (!points || points.length === 0) {
+    return null;
+  }
+
+  let nearest = null;
+  let minDistance = Infinity;
+
+  for (const point of points) {
+    const distance = calculateDistance(center, point.coordinates, "km");
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = { ...point, distance };
+    }
+  }
+
+  return nearest;
+}
+
+// ============================================================
+// ADDRESS HELPERS
+// ============================================================
+
+/**
+ * Format address
  */
 export function formatAddress(address: Address): string {
+  if (!address) return "";
+
   const parts: string[] = [];
 
-  if (address.street) parts.push(address.street);
-  if (address.city) parts.push(address.city);
-  if (address.state) parts.push(address.state);
-  if (address.postalCode) parts.push(address.postalCode);
-  if (address.country) parts.push(address.country);
+  if (address.street) {
+    parts.push(address.street);
+  }
+
+  if (address.subCity) {
+    parts.push(address.subCity);
+  }
+
+  if (address.city) {
+    parts.push(address.city);
+  }
+
+  if (address.state) {
+    parts.push(address.state);
+  }
+
+  if (address.country) {
+    parts.push(address.country);
+  }
+
+  if (address.postalCode) {
+    parts.push(address.postalCode);
+  }
 
   return parts.join(", ");
 }
 
 /**
- * Get short address
+ * Format address for display
  */
-export function getShortAddress(
-  address: string,
-  maxLength: number = 50,
+export function formatAddressDisplay(
+  address: Address,
+  includeCoordinates: boolean = false,
 ): string {
-  if (!address) return "";
-  if (address.length <= maxLength) return address;
-  return address.substring(0, maxLength) + "...";
+  const formatted = formatAddress(address);
+
+  if (includeCoordinates && address.coordinates) {
+    return `${formatted} (${address.coordinates.lat}, ${address.coordinates.lng})`;
+  }
+
+  return formatted;
 }
 
 /**
- * Extract city from address
+ * Normalize city name
  */
-export function extractCity(address: string): string | null {
-  if (!address) return null;
+export function normalizeCityName(city: string): string {
+  if (!city) return "";
+  return city
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^[a-z]/, (c) => c.toUpperCase());
+}
 
-  // Common Ethiopian city names
-  const cities = [
-    "Addis Ababa",
-    "Bahir Dar",
-    "Dire Dawa",
-    "Mekelle",
-    "Gondar",
-    "Hawassa",
-    "Jimma",
-    "Adama",
-    "Harar",
-    "Dessie",
-    "Debre Markos",
-    "Debre Berhan",
-    "Asosa",
-    "Gambela",
-    "Jijiga",
-    "Shashamane",
-    "Wolaita Sodo",
-    "Arba Minch",
-    "Batu",
-    "Bishoftu",
-  ];
+/**
+ * Get city coordinates
+ */
+export function getCityCoordinates(city: string): Coordinates | null {
+  const normalized = normalizeCityName(city);
+  return ETHIOPIAN_CITIES[normalized] || null;
+}
 
-  for (const city of cities) {
-    if (address.toLowerCase().includes(city.toLowerCase())) {
+/**
+ * Search city by name
+ */
+export function searchCity(searchTerm: string): string[] {
+  const term = searchTerm.toLowerCase().trim();
+  return Object.keys(ETHIOPIAN_CITIES).filter((city) =>
+    city.toLowerCase().includes(term),
+  );
+}
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+/**
+ * Convert degrees to radians
+ */
+export function toRadians(degrees: number): number {
+  return degrees * (Math.PI / 180);
+}
+
+/**
+ * Convert radians to degrees
+ */
+export function toDegrees(radians: number): number {
+  return radians * (180 / Math.PI);
+}
+
+/**
+ * Check if coordinates are the same
+ */
+export function areCoordinatesEqual(
+  coord1: Coordinates,
+  coord2: Coordinates,
+  tolerance: number = 0.001,
+): boolean {
+  return (
+    Math.abs(coord1.lat - coord2.lat) < tolerance &&
+    Math.abs(coord1.lng - coord2.lng) < tolerance
+  );
+}
+
+/**
+ * Round coordinates to decimal places
+ */
+export function roundCoordinates(
+  coords: Coordinates,
+  decimals: number = 6,
+): Coordinates {
+  const factor = Math.pow(10, decimals);
+  return {
+    lat: Math.round(coords.lat * factor) / factor,
+    lng: Math.round(coords.lng * factor) / factor,
+  };
+}
+
+/**
+ * Get coordinate from address (mock - in production would use geocoding API)
+ */
+export function geocodeAddress(address: string): Coordinates | null {
+  // This is a mock implementation
+  // In production, use a geocoding service like Mapbox or Google Maps
+  const cityMatch = Object.keys(ETHIOPIAN_CITIES).find((city) =>
+    address.toLowerCase().includes(city.toLowerCase()),
+  );
+
+  if (cityMatch) {
+    return ETHIOPIAN_CITIES[cityMatch];
+  }
+
+  return null;
+}
+
+/**
+ * Get address from coordinates (mock - in production would use reverse geocoding)
+ */
+export function reverseGeocode(coords: Coordinates): string | null {
+  // This is a mock implementation
+  // In production, use a reverse geocoding service
+  for (const [city, cityCoords] of Object.entries(ETHIOPIAN_CITIES)) {
+    const distance = calculateDistance(coords, cityCoords, "km");
+    if (distance < 10) {
       return city;
     }
   }
@@ -352,279 +534,57 @@ export function extractCity(address: string): string | null {
 }
 
 // ============================================================
-// GEOCODING HELPERS
-// ============================================================
-
-/**
- * Get coordinates for a city (Ethiopian cities only)
- */
-export function getCityCoordinates(cityName: string): Coordinates | null {
-  const normalizedName = cityName.toLowerCase().trim();
-  return ETHIOPIAN_CITIES[normalizedName] || null;
-}
-
-/**
- * Search for location by name
- */
-export function searchLocation(query: string): LocationSearchResult[] {
-  const results: LocationSearchResult[] = [];
-  const normalizedQuery = query.toLowerCase().trim();
-
-  // Search in Ethiopian cities
-  for (const [cityName, coords] of Object.entries(ETHIOPIAN_CITIES)) {
-    if (cityName.includes(normalizedQuery)) {
-      results.push({
-        address: cityName.charAt(0).toUpperCase() + cityName.slice(1),
-        coordinates: coords,
-        type: "city",
-        confidence: 1.0,
-      });
-    }
-  }
-
-  return results;
-}
-
-// ============================================================
-// SORTING AND FILTERING
-// ============================================================
-
-/**
- * Sort locations by distance from origin
- */
-export function sortByDistance<
-  T extends { location?: Coordinates; lat?: number; lng?: number },
->(
-  items: T[],
-  origin: Coordinates,
-  getCoordinates: (item: T) => Coordinates,
-): T[] {
-  return [...items].sort((a, b) => {
-    const coordsA = getCoordinates(a);
-    const coordsB = getCoordinates(b);
-
-    if (!coordsA || !coordsB) return 0;
-
-    const distA = calculateDistanceBetween(origin, coordsA);
-    const distB = calculateDistanceBetween(origin, coordsB);
-
-    return distA - distB;
-  });
-}
-
-/**
- * Filter items within a radius
- */
-export function filterWithinRadius<
-  T extends { location?: Coordinates; lat?: number; lng?: number },
->(
-  items: T[],
-  origin: Coordinates,
-  radiusKm: number,
-  getCoordinates: (item: T) => Coordinates,
-): T[] {
-  return items.filter((item) => {
-    const coords = getCoordinates(item);
-    if (!coords) return false;
-    const distance = calculateDistanceBetween(origin, coords);
-    return distance <= radiusKm;
-  });
-}
-
-/**
- * Get coordinates from item with fallback
- */
-export function getItemCoordinates<
-  T extends { location?: Coordinates; lat?: number; lng?: number },
->(item: T): Coordinates | null {
-  if (item.location && isValidCoordinates(item.location)) {
-    return item.location;
-  }
-
-  if (item.lat !== undefined && item.lng !== undefined) {
-    const coords = { lat: item.lat, lng: item.lng };
-    if (isValidCoordinates(coords)) {
-      return coords;
-    }
-  }
-
-  return null;
-}
-
-// ============================================================
-// DEFAULT COORDINATES
-// ============================================================
-
-/**
- * Get default coordinates (Addis Ababa)
- */
-export function getDefaultCoordinates(): Coordinates {
-  return { ...DEFAULT_COORDINATES };
-}
-
-/**
- * Get coordinates for a location with fallback to default
- */
-export function getCoordinatesWithFallback(
-  coords: Coordinates | null | undefined,
-  fallback: Coordinates = DEFAULT_COORDINATES,
-): Coordinates {
-  if (coords && isValidCoordinates(coords)) {
-    return coords;
-  }
-  return { ...fallback };
-}
-
-/**
- * Parse coordinates from string
- */
-export function parseCoordinates(coordsString: string): Coordinates | null {
-  try {
-    const parts = coordsString.split(",").map((s) => parseFloat(s.trim()));
-    if (parts.length !== 2) return null;
-
-    const coords = { lat: parts[0], lng: parts[1] };
-    if (isValidCoordinates(coords)) {
-      return coords;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// ============================================================
-// DISTANCE FORMATTING
-// ============================================================
-
-/**
- * Format distance for display
- */
-export function formatDistance(
-  distance: number,
-  unit: "km" | "mi" = "km",
-): string {
-  if (distance < 0) return "0 m";
-
-  if (distance < 1) {
-    const meters = Math.round(distance * 1000);
-    return `${meters} m`;
-  }
-
-  return `${distance.toFixed(1)} ${unit}`;
-}
-
-/**
- * Format travel time for display
- */
-export function formatTravelTime(minutes: number): string {
-  if (minutes < 0) return "0 min";
-
-  if (minutes < 60) {
-    return `${Math.round(minutes)} min`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const mins = Math.round(minutes % 60);
-
-  if (mins === 0) {
-    return `${hours} hr`;
-  }
-
-  return `${hours} hr ${mins} min`;
-}
-
-// ============================================================
-// LOCATION COMPARISON
-// ============================================================
-
-/**
- * Check if two coordinates are approximately equal
- */
-export function areCoordinatesEqual(
-  coords1: Coordinates,
-  coords2: Coordinates,
-  tolerance: number = 0.0001,
-): boolean {
-  return (
-    Math.abs(coords1.lat - coords2.lat) < tolerance &&
-    Math.abs(coords1.lng - coords2.lng) < tolerance
-  );
-}
-
-/**
- * Get midpoint between two coordinates
- */
-export function getMidpoint(
-  coords1: Coordinates,
-  coords2: Coordinates,
-): Coordinates {
-  return {
-    lat: (coords1.lat + coords2.lat) / 2,
-    lng: (coords1.lng + coords2.lng) / 2,
-  };
-}
-
-// ============================================================
 // EXPORTS
 // ============================================================
 
 export default {
-  // Constants
-  EARTH_RADIUS_KM,
-  EARTH_RADIUS_MI,
-  DEFAULT_COORDINATES,
-  ETHIOPIAN_CITIES,
-
   // Types
   Coordinates,
   Address,
   DistanceResult,
-  BoundingBox,
+  GeocodeResult,
+  ReverseGeocodeResult,
   LocationSearchResult,
+  BoundingBox,
 
-  // Distance calculation
-  calculateDistance,
-  calculateDistanceBetween,
-  calculateTravelTime,
-  getDistanceAndTime,
+  // Constants
+  EARTH_RADIUS_KM,
+  EARTH_RADIUS_MILES,
+  DEFAULT_COORDINATES,
+  ETHIOPIAN_CITIES,
 
-  // Coordinate validation
+  // Validation
   isValidLatitude,
   isValidLongitude,
   isValidCoordinates,
-  isValidCoordinatesStrict,
+  isValidAddress,
 
-  // Bounding box
-  getBoundingBox,
+  // Distance
+  calculateDistance,
+  calculateDistanceWithDuration,
+  calculateTotalDistance,
+
+  // Bounding Box
+  createBoundingBox,
   isWithinBoundingBox,
-  isWithinRadius,
+  getBoundingBoxCenter,
 
-  // Address formatting
-  formatAddress,
-  getShortAddress,
-  extractCity,
-
-  // Geocoding helpers
-  getCityCoordinates,
-  searchLocation,
-
-  // Sorting and filtering
-  sortByDistance,
+  // Search
   filterWithinRadius,
-  getItemCoordinates,
+  findNearestPoint,
 
-  // Default coordinates
-  getDefaultCoordinates,
-  getCoordinatesWithFallback,
-  parseCoordinates,
+  // Address
+  formatAddress,
+  formatAddressDisplay,
+  normalizeCityName,
+  getCityCoordinates,
+  searchCity,
 
-  // Distance formatting
-  formatDistance,
-  formatTravelTime,
-
-  // Location comparison
+  // Helpers
+  toRadians,
+  toDegrees,
   areCoordinatesEqual,
-  getMidpoint,
+  roundCoordinates,
+  geocodeAddress,
+  reverseGeocode,
 };
