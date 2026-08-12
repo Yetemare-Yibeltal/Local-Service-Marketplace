@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# ============================================================
+# PRE-PUSH HOOK
+# Runs tests before pushing to remote repository
+# ============================================================
+
+echo "🔄 Running tests before push..."
+
+# Run type checking
+echo "📝 Type checking..."
+npm run type-check || exit 1
+
+# Run linting
+echo "🔍 Linting..."
+npm run lint || exit 1
+
+# Run tests
+echo "🧪 Running tests..."
+npm run test || exit 1
+
+echo "✅ All checks passed! Push allowed."
