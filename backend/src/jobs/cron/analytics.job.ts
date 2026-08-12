@@ -1,4 +1,5 @@
 import { CronJob } from "cron";
+import { startOfDay, endOfDay, subDays, format } from "date-fns";
 import logger from "../../utils/logger";
 import { prisma } from "../../config/database";
 import { redisService } from "../../services/redis.service";
@@ -9,659 +10,635 @@ import { redisService } from "../../services/redis.service";
 
 export interface DailyAnalytics {
   date: string;
-  totalBookings: number;
-  completedBookings: number;
-  cancelledBookings: number;
-  totalRevenue: number;
-  newUsers: number;
-  newProviders: number;
-  averageRating: number;
-  totalReviews: number;
-  activeBookings: number;
+  bookings: {
+    total: number;
+    completed: number;
+    cancelled: number;
+    pending: number;
+    disputed: number;
+    revenue: number;
+    averageValue: number;
+  };
+  users: {
+    new: number;
+    active: number;
+    total: number;
+  };
+  providers: {
+    new: number;
+    active: number;
+    total: number;
+    verified: number;
+  };
+  categories: Record<string, { bookings: number; revenue: number }>;
+  topProviders: Array<{
+    providerId: string;
+    businessName: string;
+    bookings: number;
+    revenue: number;
+  }>;
+  disputes: {
+    total: number;
+    resolved: number;
+    open: number;
+  };
+  reviews: {
+    total: number;
+    averageRating: number;
+  };
 }
 
-export interface WeeklyAnalytics extends DailyAnalytics {
-  weekStart: string;
-  weekEnd: string;
-  weekNumber: number;
-  year: number;
-}
-
-export interface MonthlyAnalytics extends DailyAnalytics {
-  month: number;
-  year: number;
-  monthName: string;
+export interface AnalyticsJobResult {
+  date: string;
+  aggregated: boolean;
+  data: DailyAnalytics;
+  cached: boolean;
 }
 
 // ============================================================
-// CACHE KEYS
+// JOB CONFIGURATION
 // ============================================================
 
-const CACHE_KEYS = {
-  DAILY_ANALYTICS: "analytics:daily:",
-  WEEKLY_ANALYTICS: "analytics:weekly:",
-  MONTHLY_ANALYTICS: "analytics:monthly:",
-  REAL_TIME_METRICS: "analytics:realtime",
-};
+const JOB_NAME = "analytics-aggregation";
+const CRON_EXPRESSION = "0 1 * * *"; // Run at 1:00 AM daily
+const ENABLED = true;
 
 // ============================================================
-// ANALYTICS JOB FUNCTIONS
+// JOB STATE
 // ============================================================
+
+let cronJob: CronJob | null = null;
+let isRunning = false;
+let lastRun: Date | null = null;
+let nextRun: Date | null = null;
+
+const ANALYTICS_CACHE_KEY = "job:analytics:last_run";
+const ANALYTICS_LOCK_KEY = "job:analytics:lock";
+const DAILY_ANALYTICS_PREFIX = "analytics:daily:";
+
+// ============================================================
+// MAIN EXECUTION FUNCTION
+// ============================================================
+
+/**
+ * Execute the analytics aggregation job
+ */
+async function execute(): Promise<AnalyticsJobResult> {
+  const date = format(subDays(new Date(), 1), "yyyy-MM-dd");
+  const startDate = startOfDay(subDays(new Date(), 1));
+  const endDate = endOfDay(subDays(new Date(), 1));
+
+  try {
+    logger.info(`Starting analytics aggregation for ${date}...`);
+
+    // Acquire lock
+    const lock = await redisService.set(ANALYTICS_LOCK_KEY, "locked", 3600);
+    if (!lock) {
+      logger.warn("Analytics job lock already acquired, skipping");
+      return {
+        date,
+        aggregated: false,
+        data: {} as DailyAnalytics,
+        cached: false,
+      };
+    }
+
+    // Aggregate data
+    const data = await aggregateDailyAnalytics(startDate, endDate);
+
+    // Cache the results
+    const cacheKey = `${DAILY_ANALYTICS_PREFIX}${date}`;
+    await redisService.set(cacheKey, data, 604800); // 7 days TTL
+
+    // Store in database for historical records
+    await storeAnalytics(date, data);
+
+    // Update last run
+    await redisService.set(
+      ANALYTICS_CACHE_KEY,
+      new Date().toISOString(),
+      86400,
+    );
+
+    // Release lock
+    await redisService.delete(ANALYTICS_LOCK_KEY);
+
+    logger.info(`Analytics aggregation completed for ${date}`);
+
+    return {
+      date,
+      aggregated: true,
+      data,
+      cached: true,
+    };
+  } catch (error) {
+    logger.error(`Analytics aggregation failed for ${date}:`, error);
+    await redisService.delete(ANALYTICS_LOCK_KEY);
+    throw error;
+  }
+}
 
 /**
  * Aggregate daily analytics data
  */
-export async function aggregateDailyAnalytics(): Promise<DailyAnalytics> {
+async function aggregateDailyAnalytics(
+  startDate: Date,
+  endDate: Date,
+): Promise<DailyAnalytics> {
+  // 1. Get booking metrics
+  const bookings = await getBookingMetrics(startDate, endDate);
+
+  // 2. Get user metrics
+  const users = await getUserMetrics(startDate, endDate);
+
+  // 3. Get provider metrics
+  const providers = await getProviderMetrics(startDate, endDate);
+
+  // 4. Get category metrics
+  const categories = await getCategoryMetrics(startDate, endDate);
+
+  // 5. Get top providers
+  const topProviders = await getTopProviders(startDate, endDate);
+
+  // 6. Get dispute metrics
+  const disputes = await getDisputeMetrics(startDate, endDate);
+
+  // 7. Get review metrics
+  const reviews = await getReviewMetrics(startDate, endDate);
+
+  return {
+    date: format(startDate, "yyyy-MM-dd"),
+    bookings,
+    users,
+    providers,
+    categories,
+    topProviders,
+    disputes,
+    reviews,
+  };
+}
+
+/**
+ * Get booking metrics
+ */
+async function getBookingMetrics(
+  startDate: Date,
+  endDate: Date,
+): Promise<DailyAnalytics["bookings"]> {
   try {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const date = startOfDay.toISOString().split("T")[0];
-
-    // Get daily metrics from database
     const [
       totalBookings,
       completedBookings,
       cancelledBookings,
-      totalRevenue,
-      newUsers,
-      newProviders,
-      averageRating,
-      totalReviews,
-      activeBookings,
+      pendingBookings,
+      disputedBookings,
+      revenueResult,
     ] = await Promise.all([
       prisma.booking.count({
-        where: {
-          createdAt: { gte: startOfDay, lte: endOfDay },
-        },
+        where: { createdAt: { gte: startDate, lte: endDate } },
       }),
       prisma.booking.count({
         where: {
           status: "COMPLETED",
-          createdAt: { gte: startOfDay, lte: endOfDay },
+          completedAt: { gte: startDate, lte: endDate },
         },
       }),
       prisma.booking.count({
         where: {
           status: "CANCELLED",
-          createdAt: { gte: startOfDay, lte: endOfDay },
+          cancelledAt: { gte: startDate, lte: endDate },
+        },
+      }),
+      prisma.booking.count({
+        where: {
+          status: "PENDING",
+          createdAt: { gte: startDate, lte: endDate },
+        },
+      }),
+      prisma.booking.count({
+        where: {
+          status: "DISPUTED",
+          createdAt: { gte: startDate, lte: endDate },
         },
       }),
       prisma.booking.aggregate({
         where: {
           status: "COMPLETED",
-          completedAt: { gte: startOfDay, lte: endOfDay },
+          completedAt: { gte: startDate, lte: endDate },
         },
         _sum: { totalPrice: true },
-      }),
-      prisma.user.count({
-        where: {
-          createdAt: { gte: startOfDay, lte: endOfDay },
-        },
-      }),
-      prisma.providerProfile.count({
-        where: {
-          createdAt: { gte: startOfDay, lte: endOfDay },
-        },
-      }),
-      prisma.review.aggregate({
-        where: {
-          createdAt: { gte: startOfDay, lte: endOfDay },
-        },
-        _avg: { rating: true },
-      }),
-      prisma.review.count({
-        where: {
-          createdAt: { gte: startOfDay, lte: endOfDay },
-        },
-      }),
-      prisma.booking.count({
-        where: {
-          status: { in: ["PENDING", "CONFIRMED", "IN_PROGRESS"] },
-          createdAt: { gte: startOfDay, lte: endOfDay },
-        },
+        _avg: { totalPrice: true },
       }),
     ]);
 
-    const dailyAnalytics: DailyAnalytics = {
-      date,
-      totalBookings,
-      completedBookings,
-      cancelledBookings,
-      totalRevenue: totalRevenue._sum.totalPrice || 0,
-      newUsers,
-      newProviders,
-      averageRating: averageRating._avg.rating || 0,
-      totalReviews,
-      activeBookings,
+    return {
+      total: totalBookings,
+      completed: completedBookings,
+      cancelled: cancelledBookings,
+      pending: pendingBookings,
+      disputed: disputedBookings,
+      revenue: revenueResult._sum.totalPrice || 0,
+      averageValue: revenueResult._avg.totalPrice || 0,
     };
-
-    // Store in Redis cache
-    const cacheKey = `${CACHE_KEYS.DAILY_ANALYTICS}${date}`;
-    await redisService.set(cacheKey, dailyAnalytics, 86400); // 24 hours
-
-    // Update real-time metrics
-    await updateRealTimeMetrics();
-
-    logger.info(`Daily analytics aggregated for ${date}`, dailyAnalytics);
-
-    return dailyAnalytics;
   } catch (error) {
-    logger.error("Daily analytics aggregation failed:", error);
-    throw error;
+    logger.error("Failed to get booking metrics:", error);
+    return {
+      total: 0,
+      completed: 0,
+      cancelled: 0,
+      pending: 0,
+      disputed: 0,
+      revenue: 0,
+      averageValue: 0,
+    };
   }
 }
 
 /**
- * Aggregate weekly analytics data
+ * Get user metrics
  */
-export async function aggregateWeeklyAnalytics(): Promise<WeeklyAnalytics> {
+async function getUserMetrics(
+  startDate: Date,
+  endDate: Date,
+): Promise<DailyAnalytics["users"]> {
   try {
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
-    weekStart.setHours(0, 0, 0, 0);
-
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    weekEnd.setHours(23, 59, 59, 999);
-
-    // Get weekly metrics
-    const [
-      totalBookings,
-      completedBookings,
-      cancelledBookings,
-      totalRevenue,
-      newUsers,
-      newProviders,
-      averageRating,
-      totalReviews,
-      activeBookings,
-    ] = await Promise.all([
-      prisma.booking.count({
-        where: {
-          createdAt: { gte: weekStart, lte: weekEnd },
-        },
-      }),
-      prisma.booking.count({
-        where: {
-          status: "COMPLETED",
-          createdAt: { gte: weekStart, lte: weekEnd },
-        },
-      }),
-      prisma.booking.count({
-        where: {
-          status: "CANCELLED",
-          createdAt: { gte: weekStart, lte: weekEnd },
-        },
-      }),
-      prisma.booking.aggregate({
-        where: {
-          status: "COMPLETED",
-          completedAt: { gte: weekStart, lte: weekEnd },
-        },
-        _sum: { totalPrice: true },
+    const [newUsers, activeUsers, totalUsers] = await Promise.all([
+      prisma.user.count({
+        where: { createdAt: { gte: startDate, lte: endDate } },
       }),
       prisma.user.count({
         where: {
-          createdAt: { gte: weekStart, lte: weekEnd },
+          lastLoginAt: { gte: startDate, lte: endDate },
         },
       }),
-      prisma.providerProfile.count({
-        where: {
-          createdAt: { gte: weekStart, lte: weekEnd },
-        },
-      }),
-      prisma.review.aggregate({
-        where: {
-          createdAt: { gte: weekStart, lte: weekEnd },
-        },
-        _avg: { rating: true },
-      }),
-      prisma.review.count({
-        where: {
-          createdAt: { gte: weekStart, lte: weekEnd },
-        },
-      }),
-      prisma.booking.count({
-        where: {
-          status: { in: ["PENDING", "CONFIRMED", "IN_PROGRESS"] },
-          createdAt: { gte: weekStart, lte: weekEnd },
-        },
-      }),
-    ]);
-
-    const weekNumber = getWeekNumber(now);
-    const year = now.getFullYear();
-
-    const weeklyAnalytics: WeeklyAnalytics = {
-      weekStart: weekStart.toISOString(),
-      weekEnd: weekEnd.toISOString(),
-      weekNumber,
-      year,
-      date: weekStart.toISOString().split("T")[0],
-      totalBookings,
-      completedBookings,
-      cancelledBookings,
-      totalRevenue: totalRevenue._sum.totalPrice || 0,
-      newUsers,
-      newProviders,
-      averageRating: averageRating._avg.rating || 0,
-      totalReviews,
-      activeBookings,
-    };
-
-    // Store in Redis cache
-    const cacheKey = `${CACHE_KEYS.WEEKLY_ANALYTICS}${year}-W${weekNumber}`;
-    await redisService.set(cacheKey, weeklyAnalytics, 604800); // 7 days
-
-    logger.info(
-      `Weekly analytics aggregated for week ${weekNumber}`,
-      weeklyAnalytics,
-    );
-
-    return weeklyAnalytics;
-  } catch (error) {
-    logger.error("Weekly analytics aggregation failed:", error);
-    throw error;
-  }
-}
-
-/**
- * Aggregate monthly analytics data
- */
-export async function aggregateMonthlyAnalytics(): Promise<MonthlyAnalytics> {
-  try {
-    const now = new Date();
-    const month = now.getMonth();
-    const year = now.getFullYear();
-
-    const monthStart = new Date(year, month, 1);
-    const monthEnd = new Date(year, month + 1, 0);
-    monthEnd.setHours(23, 59, 59, 999);
-
-    // Get monthly metrics
-    const [
-      totalBookings,
-      completedBookings,
-      cancelledBookings,
-      totalRevenue,
-      newUsers,
-      newProviders,
-      averageRating,
-      totalReviews,
-      activeBookings,
-    ] = await Promise.all([
-      prisma.booking.count({
-        where: {
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-      }),
-      prisma.booking.count({
-        where: {
-          status: "COMPLETED",
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-      }),
-      prisma.booking.count({
-        where: {
-          status: "CANCELLED",
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-      }),
-      prisma.booking.aggregate({
-        where: {
-          status: "COMPLETED",
-          completedAt: { gte: monthStart, lte: monthEnd },
-        },
-        _sum: { totalPrice: true },
-      }),
-      prisma.user.count({
-        where: {
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-      }),
-      prisma.providerProfile.count({
-        where: {
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-      }),
-      prisma.review.aggregate({
-        where: {
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-        _avg: { rating: true },
-      }),
-      prisma.review.count({
-        where: {
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-      }),
-      prisma.booking.count({
-        where: {
-          status: { in: ["PENDING", "CONFIRMED", "IN_PROGRESS"] },
-          createdAt: { gte: monthStart, lte: monthEnd },
-        },
-      }),
-    ]);
-
-    const monthNames = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ];
-
-    const monthlyAnalytics: MonthlyAnalytics = {
-      month: month + 1,
-      year,
-      monthName: monthNames[month],
-      date: monthStart.toISOString().split("T")[0],
-      totalBookings,
-      completedBookings,
-      cancelledBookings,
-      totalRevenue: totalRevenue._sum.totalPrice || 0,
-      newUsers,
-      newProviders,
-      averageRating: averageRating._avg.rating || 0,
-      totalReviews,
-      activeBookings,
-    };
-
-    // Store in Redis cache
-    const cacheKey = `${CACHE_KEYS.MONTHLY_ANALYTICS}${year}-${String(month + 1).padStart(2, "0")}`;
-    await redisService.set(cacheKey, monthlyAnalytics, 2592000); // 30 days
-
-    logger.info(
-      `Monthly analytics aggregated for ${monthNames[month]} ${year}`,
-      monthlyAnalytics,
-    );
-
-    return monthlyAnalytics;
-  } catch (error) {
-    logger.error("Monthly analytics aggregation failed:", error);
-    throw error;
-  }
-}
-
-/**
- * Update real-time metrics cache
- */
-async function updateRealTimeMetrics(): Promise<void> {
-  try {
-    const [
-      totalBookings,
-      totalUsers,
-      totalProviders,
-      activeBookings,
-      totalRevenue,
-    ] = await Promise.all([
-      prisma.booking.count(),
       prisma.user.count(),
-      prisma.providerProfile.count(),
-      prisma.booking.count({
+    ]);
+
+    return {
+      new: newUsers,
+      active: activeUsers,
+      total: totalUsers,
+    };
+  } catch (error) {
+    logger.error("Failed to get user metrics:", error);
+    return { new: 0, active: 0, total: 0 };
+  }
+}
+
+/**
+ * Get provider metrics
+ */
+async function getProviderMetrics(
+  startDate: Date,
+  endDate: Date,
+): Promise<DailyAnalytics["providers"]> {
+  try {
+    const [newProviders, activeProviders, totalProviders, verifiedProviders] =
+      await Promise.all([
+        prisma.providerProfile.count({
+          where: { createdAt: { gte: startDate, lte: endDate } },
+        }),
+        prisma.providerProfile.count({
+          where: {
+            updatedAt: { gte: startDate, lte: endDate },
+            isAvailable: true,
+          },
+        }),
+        prisma.providerProfile.count(),
+        prisma.providerProfile.count({
+          where: { isVerified: true },
+        }),
+      ]);
+
+    return {
+      new: newProviders,
+      active: activeProviders,
+      total: totalProviders,
+      verified: verifiedProviders,
+    };
+  } catch (error) {
+    logger.error("Failed to get provider metrics:", error);
+    return { new: 0, active: 0, total: 0, verified: 0 };
+  }
+}
+
+/**
+ * Get category metrics
+ */
+async function getCategoryMetrics(
+  startDate: Date,
+  endDate: Date,
+): Promise<DailyAnalytics["categories"]> {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { isActive: true },
+      select: { name: true },
+    });
+
+    const result: DailyAnalytics["categories"] = {};
+
+    for (const category of categories) {
+      const bookings = await prisma.booking.count({
         where: {
-          status: { in: ["PENDING", "CONFIRMED", "IN_PROGRESS"] },
+          status: "COMPLETED",
+          completedAt: { gte: startDate, lte: endDate },
+          provider: { category: category.name },
+        },
+      });
+
+      const revenue = await prisma.booking.aggregate({
+        where: {
+          status: "COMPLETED",
+          completedAt: { gte: startDate, lte: endDate },
+          provider: { category: category.name },
+        },
+        _sum: { totalPrice: true },
+      });
+
+      if (bookings > 0 || (revenue._sum.totalPrice || 0) > 0) {
+        result[category.name] = {
+          bookings,
+          revenue: revenue._sum.totalPrice || 0,
+        };
+      }
+    }
+
+    return result;
+  } catch (error) {
+    logger.error("Failed to get category metrics:", error);
+    return {};
+  }
+}
+
+/**
+ * Get top providers
+ */
+async function getTopProviders(
+  startDate: Date,
+  endDate: Date,
+): Promise<DailyAnalytics["topProviders"]> {
+  try {
+    const results = await prisma.booking.groupBy({
+      by: ["providerId"],
+      where: {
+        status: "COMPLETED",
+        completedAt: { gte: startDate, lte: endDate },
+      },
+      _count: { id: true },
+      _sum: { totalPrice: true },
+      orderBy: {
+        _sum: {
+          totalPrice: "desc",
+        },
+      },
+      take: 10,
+    });
+
+    const topProviders = await Promise.all(
+      results.map(async (item) => {
+        const provider = await prisma.providerProfile.findUnique({
+          where: { id: item.providerId },
+          select: { businessName: true },
+        });
+        return {
+          providerId: item.providerId,
+          businessName: provider?.businessName || "Unknown",
+          bookings: item._count.id,
+          revenue: item._sum.totalPrice || 0,
+        };
+      }),
+    );
+
+    return topProviders;
+  } catch (error) {
+    logger.error("Failed to get top providers:", error);
+    return [];
+  }
+}
+
+/**
+ * Get dispute metrics
+ */
+async function getDisputeMetrics(
+  startDate: Date,
+  endDate: Date,
+): Promise<DailyAnalytics["disputes"]> {
+  try {
+    const [total, resolved, open] = await Promise.all([
+      prisma.dispute.count({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+      }),
+      prisma.dispute.count({
+        where: {
+          status: "RESOLVED",
+          resolvedAt: { gte: startDate, lte: endDate },
         },
       }),
-      prisma.booking.aggregate({
-        where: { status: "COMPLETED" },
-        _sum: { totalPrice: true },
+      prisma.dispute.count({
+        where: {
+          status: { in: ["OPEN", "UNDER_REVIEW"] },
+          createdAt: { gte: startDate, lte: endDate },
+        },
       }),
     ]);
 
-    const metrics = {
-      totalBookings,
-      totalUsers,
-      totalProviders,
-      activeBookings,
-      totalRevenue: totalRevenue._sum.totalPrice || 0,
-      lastUpdated: new Date().toISOString(),
-    };
-
-    await redisService.set(CACHE_KEYS.REAL_TIME_METRICS, metrics, 300); // 5 minutes
-
-    logger.debug("Real-time metrics updated", metrics);
+    return { total, resolved, open };
   } catch (error) {
-    logger.error("Real-time metrics update failed:", error);
-    throw error;
+    logger.error("Failed to get dispute metrics:", error);
+    return { total: 0, resolved: 0, open: 0 };
   }
 }
 
 /**
- * Get week number from date
+ * Get review metrics
  */
-function getWeekNumber(date: Date): number {
-  const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-  const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-  return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-}
-
-/**
- * Run all analytics aggregation jobs
- */
-export async function runAllAnalyticsJobs(): Promise<void> {
+async function getReviewMetrics(
+  startDate: Date,
+  endDate: Date,
+): Promise<DailyAnalytics["reviews"]> {
   try {
-    logger.info("Starting all analytics aggregation jobs...");
-
-    await Promise.all([
-      aggregateDailyAnalytics(),
-      aggregateWeeklyAnalytics(),
-      aggregateMonthlyAnalytics(),
+    const [total, avgRating] = await Promise.all([
+      prisma.review.count({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+      }),
+      prisma.review.aggregate({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        _avg: { rating: true },
+      }),
     ]);
 
-    logger.info("All analytics aggregation jobs completed successfully");
+    return {
+      total,
+      averageRating: avgRating._avg.rating || 0,
+    };
   } catch (error) {
-    logger.error("Analytics aggregation jobs failed:", error);
-    throw error;
+    logger.error("Failed to get review metrics:", error);
+    return { total: 0, averageRating: 0 };
   }
 }
 
 /**
- * Get daily analytics from cache or database
+ * Store analytics in database
  */
-export async function getDailyAnalytics(
+async function storeAnalytics(
+  date: string,
+  data: DailyAnalytics,
+): Promise<void> {
+  try {
+    // Store as system setting for historical data
+    const existing = await prisma.systemSetting.findUnique({
+      where: { key: `analytics:${date}` },
+    });
+
+    if (existing) {
+      await prisma.systemSetting.update({
+        where: { key: `analytics:${date}` },
+        data: {
+          value: data,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      await prisma.systemSetting.create({
+        data: {
+          key: `analytics:${date}`,
+          value: data,
+          description: `Daily analytics for ${date}`,
+          isPublic: false,
+        },
+      });
+    }
+  } catch (error) {
+    logger.error(`Failed to store analytics for ${date}:`, error);
+  }
+}
+
+/**
+ * Get cached analytics for a specific date
+ */
+export async function getCachedAnalytics(
   date: string,
 ): Promise<DailyAnalytics | null> {
   try {
-    const cacheKey = `${CACHE_KEYS.DAILY_ANALYTICS}${date}`;
-    const cached = await redisService.get<DailyAnalytics>(cacheKey);
-
-    if (cached) {
-      return cached;
-    }
-
-    // If not in cache, aggregate from database
-    return await aggregateDailyAnalytics();
+    const cacheKey = `${DAILY_ANALYTICS_PREFIX}${date}`;
+    return await redisService.get<DailyAnalytics>(cacheKey);
   } catch (error) {
-    logger.error("Get daily analytics failed:", error);
+    logger.error(`Failed to get cached analytics for ${date}:`, error);
     return null;
   }
 }
 
+// ============================================================
+// JOB MANAGEMENT FUNCTIONS
+// ============================================================
+
 /**
- * Get weekly analytics from cache or database
+ * Start the cron job
  */
-export async function getWeeklyAnalytics(
-  year: number,
-  weekNumber: number,
-): Promise<WeeklyAnalytics | null> {
+export function start(): void {
+  if (cronJob) {
+    logger.warn("Analytics job is already running");
+    return;
+  }
+
+  if (!ENABLED) {
+    logger.warn("Analytics job is disabled");
+    return;
+  }
+
   try {
-    const cacheKey = `${CACHE_KEYS.WEEKLY_ANALYTICS}${year}-W${weekNumber}`;
-    const cached = await redisService.get<WeeklyAnalytics>(cacheKey);
+    cronJob = new CronJob(
+      CRON_EXPRESSION,
+      async () => {
+        try {
+          isRunning = true;
+          lastRun = new Date();
+          await execute();
+        } catch (error) {
+          logger.error("Analytics job execution failed:", error);
+        } finally {
+          isRunning = false;
+        }
+      },
+      null,
+      true,
+      "Africa/Addis_Ababa",
+    );
 
-    if (cached) {
-      return cached;
-    }
-
-    // If not in cache, aggregate from database
-    return await aggregateWeeklyAnalytics();
+    nextRun = cronJob.nextDate().toDate();
+    logger.info(`Analytics job started. Next run: ${nextRun.toISOString()}`);
   } catch (error) {
-    logger.error("Get weekly analytics failed:", error);
-    return null;
+    logger.error("Failed to start analytics job:", error);
+    throw error;
   }
 }
 
 /**
- * Get monthly analytics from cache or database
+ * Stop the cron job
  */
-export async function getMonthlyAnalytics(
-  year: number,
-  month: number,
-): Promise<MonthlyAnalytics | null> {
+export function stop(): void {
+  if (!cronJob) {
+    logger.warn("Analytics job is not running");
+    return;
+  }
+
   try {
-    const cacheKey = `${CACHE_KEYS.MONTHLY_ANALYTICS}${year}-${String(month).padStart(2, "0")}`;
-    const cached = await redisService.get<MonthlyAnalytics>(cacheKey);
-
-    if (cached) {
-      return cached;
-    }
-
-    // If not in cache, aggregate from database
-    return await aggregateMonthlyAnalytics();
+    cronJob.stop();
+    cronJob = null;
+    isRunning = false;
+    nextRun = null;
+    logger.info("Analytics job stopped");
   } catch (error) {
-    logger.error("Get monthly analytics failed:", error);
-    return null;
+    logger.error("Failed to stop analytics job:", error);
+    throw error;
   }
 }
 
 /**
- * Get real-time metrics from cache
+ * Get job status
  */
-export async function getRealTimeMetrics(): Promise<any> {
-  try {
-    const cached = await redisService.get(CACHE_KEYS.REAL_TIME_METRICS);
-    if (cached) {
-      return cached;
-    }
-
-    await updateRealTimeMetrics();
-    return await redisService.get(CACHE_KEYS.REAL_TIME_METRICS);
-  } catch (error) {
-    logger.error("Get real-time metrics failed:", error);
-    return null;
-  }
+export function getStatus(): {
+  name: string;
+  running: boolean;
+  enabled: boolean;
+  lastRun: Date | null;
+  nextRun: Date | null;
+  cronExpression: string;
+} {
+  return {
+    name: JOB_NAME,
+    running: isRunning,
+    enabled: ENABLED,
+    lastRun: lastRun,
+    nextRun: nextRun,
+    cronExpression: CRON_EXPRESSION,
+  };
 }
 
 // ============================================================
-// CRON JOB DEFINITION
+// INITIALIZATION
 // ============================================================
 
-/**
- * Analytics cron job - runs at midnight every day
- */
-export const analyticsCronJob = new CronJob(
-  "0 0 * * *", // At 00:00 every day
-  async () => {
-    logger.info("Analytics cron job started");
-    try {
-      await runAllAnalyticsJobs();
-      logger.info("Analytics cron job completed successfully");
-    } catch (error) {
-      logger.error("Analytics cron job failed:", error);
-    }
-  },
-  null, // onComplete
-  true, // start
-  "Africa/Addis_Ababa", // timezone
-);
-
-/**
- * Weekly analytics job - runs at midnight on Monday
- */
-export const weeklyAnalyticsJob = new CronJob(
-  "0 0 * * 1", // At 00:00 on Monday
-  async () => {
-    logger.info("Weekly analytics job started");
-    try {
-      await aggregateWeeklyAnalytics();
-      logger.info("Weekly analytics job completed");
-    } catch (error) {
-      logger.error("Weekly analytics job failed:", error);
-    }
-  },
-  null,
-  true,
-  "Africa/Addis_Ababa",
-);
-
-/**
- * Monthly analytics job - runs at midnight on the 1st of each month
- */
-export const monthlyAnalyticsJob = new CronJob(
-  "0 0 1 * *", // At 00:00 on the 1st of every month
-  async () => {
-    logger.info("Monthly analytics job started");
-    try {
-      await aggregateMonthlyAnalytics();
-      logger.info("Monthly analytics job completed");
-    } catch (error) {
-      logger.error("Monthly analytics job failed:", error);
-    }
-  },
-  null,
-  true,
-  "Africa/Addis_Ababa",
-);
-
-// ============================================================
-// START ALL JOBS
-// ============================================================
-
-export function startAllAnalyticsJobs(): void {
-  logger.info("Starting all analytics cron jobs...");
-  analyticsCronJob.start();
-  weeklyAnalyticsJob.start();
-  monthlyAnalyticsJob.start();
-  logger.info("All analytics cron jobs started");
-}
-
-// ============================================================
-// STOP ALL JOBS
-// ============================================================
-
-export function stopAllAnalyticsJobs(): void {
-  logger.info("Stopping all analytics cron jobs...");
-  analyticsCronJob.stop();
-  weeklyAnalyticsJob.stop();
-  monthlyAnalyticsJob.stop();
-  logger.info("All analytics cron jobs stopped");
+if (ENABLED) {
+  start();
 }
 
 // ============================================================
 // EXPORTS
 // ============================================================
 
-export default {
-  // Job functions
-  aggregateDailyAnalytics,
-  aggregateWeeklyAnalytics,
-  aggregateMonthlyAnalytics,
-  runAllAnalyticsJobs,
-
-  // Getter functions
-  getDailyAnalytics,
-  getWeeklyAnalytics,
-  getMonthlyAnalytics,
-  getRealTimeMetrics,
-
-  // Cron jobs
-  analyticsCronJob,
-  weeklyAnalyticsJob,
-  monthlyAnalyticsJob,
-
-  // Control functions
-  startAllAnalyticsJobs,
-  stopAllAnalyticsJobs,
+export const analyticsJob = {
+  name: JOB_NAME,
+  cronExpression: CRON_EXPRESSION,
+  enabled: ENABLED,
+  running: isRunning,
+  lastRun,
+  nextRun,
+  start,
+  stop,
+  execute,
+  getStatus,
+  getCachedAnalytics,
 };
+
+export default analyticsJob;
