@@ -15,18 +15,8 @@ export interface NotificationEventPayload {
   status?: string;
   error?: string;
   retryCount?: number;
-  deliveryAttempts?: number;
-}
-
-export interface BulkNotificationEventPayload {
-  userIds: string[];
-  type: "EMAIL" | "SMS" | "PUSH";
-  title: string;
-  message: string;
-  count: number;
-  successful: number;
-  failed: number;
-  errors?: Array<{ userId: string; error: string }>;
+  deliveredAt?: Date;
+  readAt?: Date;
 }
 
 export interface NotificationPublisherOptions {
@@ -36,14 +26,16 @@ export interface NotificationPublisherOptions {
   timestamp?: Date;
 }
 
-export interface NotificationPreferencesPayload {
-  userId: string;
-  preferences: Record<string, any>;
-}
-
-export interface NotificationCleanupPayload {
-  days: number;
-  count?: number;
+export interface BulkNotificationPayload {
+  userIds: string[];
+  type: "EMAIL" | "SMS" | "PUSH";
+  title: string;
+  message: string;
+  data?: Record<string, any>;
+  count: number;
+  successful: number;
+  failed: number;
+  errors?: Array<{ userId: string; error: string }>;
 }
 
 // ============================================================
@@ -66,14 +58,18 @@ export class NotificationEventPublisher {
   /**
    * Publish notification sent event
    */
-  public async notificationSent(
+  public async publish(
     payload: NotificationEventPayload,
     options?: NotificationPublisherOptions,
   ): Promise<boolean> {
     try {
       const eventData: Partial<EventData> = {
         type: EVENTS.NOTIFICATION_SENT,
-        payload,
+        payload: {
+          ...payload,
+          status: "SENT",
+          sentAt: options?.timestamp || new Date(),
+        },
         timestamp: options?.timestamp || new Date(),
         source: options?.source || "notification.publisher",
         userId: payload.userId,
@@ -81,10 +77,9 @@ export class NotificationEventPublisher {
       };
 
       const result = eventBus.emit(EVENTS.NOTIFICATION_SENT, eventData);
-      logger.info(`Notification sent event published: ${payload.id}`, {
+      logger.debug(`Notification sent event published: ${payload.id}`, {
         userId: payload.userId,
         type: payload.type,
-        title: payload.title,
       });
 
       return result;
@@ -95,26 +90,68 @@ export class NotificationEventPublisher {
   }
 
   /**
-   * Publish notification read event
+   * Publish bulk notification event
    */
-  public async notificationRead(
-    payload: NotificationEventPayload,
+  public async publishBulk(
+    payload: BulkNotificationPayload,
     options?: NotificationPublisherOptions,
   ): Promise<boolean> {
     try {
+      const eventData: Partial<EventData> = {
+        type: "notification.bulk.sent" as any,
+        payload: {
+          ...payload,
+          timestamp: options?.timestamp || new Date(),
+        },
+        timestamp: options?.timestamp || new Date(),
+        source: options?.source || "notification.publisher",
+        correlationId: options?.correlationId,
+      };
+
+      const result = eventBus.emit("notification.bulk.sent" as any, eventData);
+      logger.info(`Bulk notification event published: ${payload.count} users`, {
+        type: payload.type,
+        successful: payload.successful,
+        failed: payload.failed,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Bulk notification event publish failed:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Publish notification read event
+   */
+  public async publishRead(
+    notificationId: string,
+    userId: string,
+    readAt?: Date,
+    options?: NotificationPublisherOptions,
+  ): Promise<boolean> {
+    try {
+      const payload: NotificationEventPayload = {
+        id: notificationId,
+        userId,
+        type: "PUSH",
+        title: "",
+        message: "",
+        readAt: readAt || new Date(),
+      };
+
       const eventData: Partial<EventData> = {
         type: EVENTS.NOTIFICATION_READ,
         payload,
         timestamp: options?.timestamp || new Date(),
         source: options?.source || "notification.publisher",
-        userId: payload.userId,
+        userId,
         correlationId: options?.correlationId,
       };
 
       const result = eventBus.emit(EVENTS.NOTIFICATION_READ, eventData);
-      logger.debug(`Notification read event published: ${payload.id}`, {
-        userId: payload.userId,
-      });
+      logger.debug(`Notification read event published: ${notificationId}`);
 
       return result;
     } catch (error) {
@@ -126,25 +163,33 @@ export class NotificationEventPublisher {
   /**
    * Publish notification delivered event
    */
-  public async notificationDelivered(
-    payload: NotificationEventPayload,
+  public async publishDelivered(
+    notificationId: string,
+    userId: string,
+    deliveredAt?: Date,
     options?: NotificationPublisherOptions,
   ): Promise<boolean> {
     try {
+      const payload: NotificationEventPayload = {
+        id: notificationId,
+        userId,
+        type: "PUSH",
+        title: "",
+        message: "",
+        deliveredAt: deliveredAt || new Date(),
+      };
+
       const eventData: Partial<EventData> = {
         type: EVENTS.NOTIFICATION_DELIVERED,
         payload,
         timestamp: options?.timestamp || new Date(),
         source: options?.source || "notification.publisher",
-        userId: payload.userId,
+        userId,
         correlationId: options?.correlationId,
       };
 
       const result = eventBus.emit(EVENTS.NOTIFICATION_DELIVERED, eventData);
-      logger.debug(`Notification delivered event published: ${payload.id}`, {
-        userId: payload.userId,
-        type: payload.type,
-      });
+      logger.debug(`Notification delivered event published: ${notificationId}`);
 
       return result;
     } catch (error) {
@@ -156,26 +201,38 @@ export class NotificationEventPublisher {
   /**
    * Publish notification failed event
    */
-  public async notificationFailed(
-    payload: NotificationEventPayload,
+  public async publishFailed(
+    notificationId: string,
+    userId: string,
+    error: string,
+    retryCount: number = 0,
     options?: NotificationPublisherOptions,
   ): Promise<boolean> {
     try {
+      const payload: NotificationEventPayload = {
+        id: notificationId,
+        userId,
+        type: "PUSH",
+        title: "",
+        message: "",
+        error,
+        retryCount,
+        status: "FAILED",
+      };
+
       const eventData: Partial<EventData> = {
         type: EVENTS.NOTIFICATION_FAILED,
         payload,
         timestamp: options?.timestamp || new Date(),
         source: options?.source || "notification.publisher",
-        userId: payload.userId,
+        userId,
         correlationId: options?.correlationId,
       };
 
       const result = eventBus.emit(EVENTS.NOTIFICATION_FAILED, eventData);
-      logger.warn(`Notification failed event published: ${payload.id}`, {
-        userId: payload.userId,
-        type: payload.type,
-        error: payload.error,
-        retryCount: payload.retryCount || 0,
+      logger.warn(`Notification failed event published: ${notificationId}`, {
+        error,
+        retryCount,
       });
 
       return result;
@@ -186,57 +243,28 @@ export class NotificationEventPublisher {
   }
 
   /**
-   * Publish bulk notification sent event
-   */
-  public async bulkNotificationSent(
-    payload: BulkNotificationEventPayload,
-    options?: NotificationPublisherOptions,
-  ): Promise<boolean> {
-    try {
-      const eventData: Partial<EventData> = {
-        type: "notification.bulk.sent" as any,
-        payload,
-        timestamp: options?.timestamp || new Date(),
-        source: options?.source || "notification.publisher",
-        userId: options?.userId,
-        correlationId: options?.correlationId,
-      };
-
-      const result = eventBus.emit("notification.bulk.sent" as any, eventData);
-      logger.info(
-        `Bulk notification sent event published: ${payload.count} users`,
-        {
-          type: payload.type,
-          successful: payload.successful,
-          failed: payload.failed,
-        },
-      );
-
-      return result;
-    } catch (error) {
-      logger.error("Bulk notification sent event publish failed:", error);
-      return false;
-    }
-  }
-
-  /**
    * Publish notification cleanup event
    */
-  public async notificationCleanup(
-    payload: NotificationCleanupPayload,
+  public async publishCleanup(
+    days: number = 30,
+    count?: number,
     options?: NotificationPublisherOptions,
   ): Promise<boolean> {
     try {
       const eventData: Partial<EventData> = {
         type: "notification.cleanup" as any,
-        payload,
+        payload: {
+          days,
+          count: count || 0,
+          timestamp: options?.timestamp || new Date(),
+        },
         timestamp: options?.timestamp || new Date(),
         source: options?.source || "notification.publisher",
         correlationId: options?.correlationId,
       };
 
       const result = eventBus.emit("notification.cleanup" as any, eventData);
-      logger.info(`Notification cleanup event published: ${payload.days} days`);
+      logger.info(`Notification cleanup event published: ${days} days`);
 
       return result;
     } catch (error) {
@@ -248,17 +276,22 @@ export class NotificationEventPublisher {
   /**
    * Publish notification preference update event
    */
-  public async preferenceUpdate(
-    payload: NotificationPreferencesPayload,
+  public async publishPreferenceUpdate(
+    userId: string,
+    preferences: Record<string, any>,
     options?: NotificationPublisherOptions,
   ): Promise<boolean> {
     try {
       const eventData: Partial<EventData> = {
         type: "notification.preference.update" as any,
-        payload,
+        payload: {
+          userId,
+          preferences,
+          timestamp: options?.timestamp || new Date(),
+        },
         timestamp: options?.timestamp || new Date(),
         source: options?.source || "notification.publisher",
-        userId: payload.userId,
+        userId,
         correlationId: options?.correlationId,
       };
 
@@ -266,9 +299,7 @@ export class NotificationEventPublisher {
         "notification.preference.update" as any,
         eventData,
       );
-      logger.debug(
-        `Notification preference update event published: ${payload.userId}`,
-      );
+      logger.debug(`Notification preference update event published: ${userId}`);
 
       return result;
     } catch (error) {
@@ -281,11 +312,42 @@ export class NotificationEventPublisher {
   }
 
   /**
+   * Publish notification event asynchronously
+   */
+  public async publishAsync(
+    payload: NotificationEventPayload,
+    options?: NotificationPublisherOptions,
+  ): Promise<void> {
+    try {
+      const eventData: Partial<EventData> = {
+        type: EVENTS.NOTIFICATION_SENT,
+        payload: {
+          ...payload,
+          status: "SENT",
+          sentAt: options?.timestamp || new Date(),
+        },
+        timestamp: options?.timestamp || new Date(),
+        source: options?.source || "notification.publisher",
+        userId: payload.userId,
+        correlationId: options?.correlationId,
+      };
+
+      await eventBus.emitAsync(EVENTS.NOTIFICATION_SENT, eventData);
+      logger.debug(
+        `Notification event published asynchronously: ${payload.id}`,
+      );
+    } catch (error) {
+      logger.error(`Async notification event publish failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Publish generic notification event
    */
   public async publishEvent(
     eventType: string,
-    payload: any,
+    payload: NotificationEventPayload,
     options?: NotificationPublisherOptions,
   ): Promise<boolean> {
     try {
@@ -294,46 +356,20 @@ export class NotificationEventPublisher {
         payload,
         timestamp: options?.timestamp || new Date(),
         source: options?.source || "notification.publisher",
-        userId: options?.userId || payload.userId,
+        userId: payload.userId,
         correlationId: options?.correlationId,
       };
 
       const result = eventBus.emit(eventType as any, eventData);
-      logger.debug(`Notification event published: ${eventType}`);
+      logger.debug(`Notification event published: ${eventType}`, {
+        notificationId: payload.id,
+        userId: payload.userId,
+      });
 
       return result;
     } catch (error) {
       logger.error(`Notification event ${eventType} publish failed:`, error);
       return false;
-    }
-  }
-
-  /**
-   * Publish notification event asynchronously
-   */
-  public async publishEventAsync(
-    eventType: string,
-    payload: any,
-    options?: NotificationPublisherOptions,
-  ): Promise<void> {
-    try {
-      const eventData: Partial<EventData> = {
-        type: eventType as any,
-        payload,
-        timestamp: options?.timestamp || new Date(),
-        source: options?.source || "notification.publisher",
-        userId: options?.userId || payload.userId,
-        correlationId: options?.correlationId,
-      };
-
-      await eventBus.emitAsync(eventType as any, eventData);
-      logger.debug(`Notification event published asynchronously: ${eventType}`);
-    } catch (error) {
-      logger.error(
-        `Async notification event ${eventType} publish failed:`,
-        error,
-      );
-      throw error;
     }
   }
 }
