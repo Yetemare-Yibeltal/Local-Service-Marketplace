@@ -1,0 +1,1616 @@
+openapi: 3.0.0
+info:
+  title: Local Service Provider Marketplace API
+  description: |
+    RESTful API for connecting customers with local service professionals in Ethiopia.
+    This API powers the Local Service Provider Marketplace platform, enabling users to find,
+    book, and manage services from verified professionals.
+    
+    ## Features
+    - User authentication & authorization
+    - Provider registration & verification
+    - Service discovery & booking
+    - Review & rating system
+    - Payment processing
+    - Real-time notifications
+    - Admin management
+    - Analytics & reporting
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@marketplace.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.marketplace.com/api/v1
+    description: Production server
+  - url: http://localhost:5000/api/v1
+    description: Development server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: Authentication and authorization endpoints
+  - name: Users
+    description: User management endpoints
+  - name: Providers
+    description: Provider management endpoints
+  - name: Services
+    description: Service management endpoints
+  - name: Bookings
+    description: Booking management endpoints
+  - name: Reviews
+    description: Review management endpoints
+  - name: Categories
+    description: Category management endpoints
+  - name: Search
+    description: Search and discovery endpoints
+  - name: Notifications
+    description: Notification management endpoints
+  - name: Payments
+    description: Payment processing endpoints
+  - name: Analytics
+    description: Analytics and reporting endpoints
+  - name: Admin
+    description: Administrative endpoints
+  - name: Webhooks
+    description: Webhook handling endpoints
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Enter your JWT token here. Example: Bearer your-token
+
+  schemas:
+    # ============================================================
+    # COMMON SCHEMAS
+    # ============================================================
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation successful
+        data:
+          type: object
+          nullable: true
+        errors:
+          type: array
+          items:
+            type: string
+        timestamp:
+          type: string
+          format: date-time
+        statusCode:
+          type: integer
+          example: 200
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Something went wrong
+        errors:
+          type: array
+          items:
+            type: string
+        statusCode:
+          type: integer
+          example: 400
+        timestamp:
+          type: string
+          format: date-time
+        path:
+          type: string
+          example: /api/v1/users
+
+    PaginatedResponse:
+      type: object
+      properties:
+        data:
+          type: array
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 10
+            totalItems:
+              type: integer
+              example: 100
+            totalPages:
+              type: integer
+              example: 10
+            hasNext:
+              type: boolean
+              example: true
+            hasPrev:
+              type: boolean
+              example: false
+
+    # ============================================================
+    # USER SCHEMAS
+    # ============================================================
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        phone:
+          type: string
+          example: +251912345678
+        fullName:
+          type: string
+          example: John Doe
+        role:
+          type: string
+          enum: [CUSTOMER, PROVIDER, ADMIN]
+          example: CUSTOMER
+        profileImage:
+          type: string
+          nullable: true
+          example: https://res.cloudinary.com/cloud/image/upload/v1234567890/avatar.jpg
+        bio:
+          type: string
+          nullable: true
+          example: Experienced software developer
+        isEmailVerified:
+          type: boolean
+          example: true
+        isPhoneVerified:
+          type: boolean
+          example: true
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - phone
+        - password
+        - fullName
+      properties:
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        phone:
+          type: string
+          example: +251912345678
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: SecurePass123!
+        fullName:
+          type: string
+          example: John Doe
+        role:
+          type: string
+          enum: [CUSTOMER, PROVIDER]
+          default: CUSTOMER
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        password:
+          type: string
+          format: password
+          example: SecurePass123!
+
+    TokenResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        expiresIn:
+          type: integer
+          example: 900
+        user:
+          $ref: '#/components/schemas/User'
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+
+    # ============================================================
+    # PROVIDER SCHEMAS
+    # ============================================================
+    Provider:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        businessName:
+          type: string
+          example: Bole Fast Plumbing
+        businessLogo:
+          type: string
+          nullable: true
+        description:
+          type: string
+          example: Professional plumbing services in Addis Ababa
+        category:
+          type: string
+          example: Plumbing
+        subCategory:
+          type: string
+          nullable: true
+        yearsExperience:
+          type: integer
+          example: 5
+        hourlyRate:
+          type: number
+          nullable: true
+          example: 500
+        isAvailable:
+          type: boolean
+          example: true
+        isVerified:
+          type: boolean
+          example: true
+        averageRating:
+          type: number
+          example: 4.8
+        totalReviews:
+          type: integer
+          example: 25
+        address:
+          type: string
+          example: Bole, Rwanda Street
+        city:
+          type: string
+          example: Addis Ababa
+        locationLat:
+          type: number
+          example: 9.03
+        locationLng:
+          type: number
+          example: 38.74
+        completedJobs:
+          type: integer
+          example: 50
+        responseTime:
+          type: integer
+          nullable: true
+          example: 15
+        isFeatured:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        providerId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Fix Leaky Pipe
+        description:
+          type: string
+          example: Repair or replace damaged pipe
+        priceType:
+          type: string
+          enum: [FIXED, HOURLY]
+        price:
+          type: number
+          example: 800
+        discountPrice:
+          type: number
+          nullable: true
+        estimatedDurationMinutes:
+          type: integer
+          nullable: true
+          example: 120
+        category:
+          type: string
+          example: Plumbing
+        subCategory:
+          type: string
+          nullable: true
+        images:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+          example: true
+
+    # ============================================================
+    # BOOKING SCHEMAS
+    # ============================================================
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        bookingNumber:
+          type: string
+          example: BKG-20260101-ABC12
+        customerId:
+          type: string
+          format: uuid
+        providerId:
+          type: string
+          format: uuid
+        serviceId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, DISPUTED]
+        scheduledDate:
+          type: string
+          format: date-time
+        address:
+          type: string
+          example: Bole, Rwanda Street, Building 24
+        specialNotes:
+          type: string
+          nullable: true
+        totalPrice:
+          type: number
+          example: 1200
+        depositAmount:
+          type: number
+          example: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ============================================================
+    # REVIEW SCHEMAS
+    # ============================================================
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        bookingId:
+          type: string
+          format: uuid
+        reviewerId:
+          type: string
+          format: uuid
+        providerId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: string
+          example: Excellent service, highly recommend!
+        images:
+          type: array
+          items:
+            type: string
+        isPublic:
+          type: boolean
+          example: true
+        isVerified:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+
+# ============================================================
+# PATHS
+# ============================================================
+
+paths:
+  # ============================================================
+  # AUTHENTICATION
+  # ============================================================
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Creates a new user account with email, phone, and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        201:
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TokenResponse'
+        400:
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        409:
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticate user and return access and refresh tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        200:
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TokenResponse'
+        401:
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get a new access token using a refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        200:
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          accessToken:
+                            type: string
+                          expiresIn:
+                            type: integer
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      description: Invalidate the refresh token and clear session
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: Get the authenticated user's profile information
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+
+  # ============================================================
+  # USERS
+  # ============================================================
+  /users/profile:
+    get:
+      tags:
+        - Users
+      summary: Get user profile
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Profile retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+
+    put:
+      tags:
+        - Users
+      summary: Update user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName:
+                  type: string
+                phone:
+                  type: string
+                bio:
+                  type: string
+                profileImage:
+                  type: string
+      responses:
+        200:
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+
+  # ============================================================
+  # PROVIDERS
+  # ============================================================
+  /providers/register:
+    post:
+      tags:
+        - Providers
+      summary: Register as a provider
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - businessName
+                - description
+                - category
+                - locationLat
+                - locationLng
+                - address
+                - city
+              properties:
+                businessName:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+                subCategory:
+                  type: string
+                yearsExperience:
+                  type: integer
+                hourlyRate:
+                  type: number
+                locationLat:
+                  type: number
+                locationLng:
+                  type: number
+                address:
+                  type: string
+                city:
+                  type: string
+                subCity:
+                  type: string
+                workingHours:
+                  type: object
+      responses:
+        201:
+          description: Provider registered successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Provider'
+
+  /providers/search:
+    post:
+      tags:
+        - Search
+        - Providers
+      summary: Search providers by location
+      description: Search for providers near a location with filters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lat
+                - lng
+              properties:
+                lat:
+                  type: number
+                lng:
+                  type: number
+                radius:
+                  type: number
+                  default: 10
+                query:
+                  type: string
+                category:
+                  type: string
+                subCategory:
+                  type: string
+                minRating:
+                  type: number
+                maxPrice:
+                  type: number
+                isAvailable:
+                  type: boolean
+                isVerified:
+                  type: boolean
+                page:
+                  type: integer
+                limit:
+                  type: integer
+      responses:
+        200:
+          description: Search results returned
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Provider'
+
+  /providers/{id}:
+    get:
+      tags:
+        - Providers
+      summary: Get provider by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Provider details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Provider'
+
+  # ============================================================
+  # BOOKINGS
+  # ============================================================
+  /bookings:
+    post:
+      tags:
+        - Bookings
+      summary: Create a booking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - providerId
+                - scheduledDate
+                - address
+              properties:
+                providerId:
+                  type: string
+                  format: uuid
+                serviceId:
+                  type: string
+                  format: uuid
+                scheduledDate:
+                  type: string
+                  format: date-time
+                address:
+                  type: string
+                specialNotes:
+                  type: string
+                totalPrice:
+                  type: number
+      responses:
+        201:
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Booking'
+
+  /bookings/customer:
+    get:
+      tags:
+        - Bookings
+      summary: Get customer bookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, DISPUTED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Bookings retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Booking'
+
+  /bookings/{id}/cancel:
+    post:
+      tags:
+        - Bookings
+      summary: Cancel a booking
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        200:
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Booking'
+
+  # ============================================================
+  # REVIEWS
+  # ============================================================
+  /reviews:
+    post:
+      tags:
+        - Reviews
+      summary: Create a review
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bookingId
+                - rating
+                - comment
+              properties:
+                bookingId:
+                  type: string
+                  format: uuid
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+                images:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        201:
+          description: Review created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Review'
+
+  /reviews/provider/{providerId}:
+    get:
+      tags:
+        - Reviews
+      summary: Get provider reviews
+      parameters:
+        - name: providerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Reviews retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Review'
+                      stats:
+                        type: object
+                        properties:
+                          averageRating:
+                            type: number
+                          totalReviews:
+                            type: integer
+                          ratingDistribution:
+                            type: object
+
+  # ============================================================
+  # CATEGORIES
+  # ============================================================
+  /categories:
+    get:
+      tags:
+        - Categories
+      summary: Get categories
+      parameters:
+        - name: parentId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        200:
+          description: Categories retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Category'
+
+  /categories/tree:
+    get:
+      tags:
+        - Categories
+      summary: Get category tree
+      responses:
+        200:
+          description: Category tree retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CategoryTree'
+
+  # ============================================================
+  # NOTIFICATIONS
+  # ============================================================
+  /notifications:
+    get:
+      tags:
+        - Notifications
+      summary: Get user notifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: isRead
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Notifications retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Notification'
+                      unreadCount:
+                        type: integer
+
+  /notifications/read-all:
+    post:
+      tags:
+        - Notifications
+      summary: Mark all notifications as read
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: All notifications marked as read
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          count:
+                            type: integer
+
+  # ============================================================
+  # PAYMENTS
+  # ============================================================
+  /payments:
+    post:
+      tags:
+        - Payments
+      summary: Initiate payment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bookingId
+                - amount
+                - paymentMethod
+              properties:
+                bookingId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+                paymentMethod:
+                  type: string
+                  enum: [CASH, TELEBIRR, CHAPA, BANK_TRANSFER]
+                metadata:
+                  type: object
+      responses:
+        201:
+          description: Payment initiated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Payment'
+
+  /payments/webhook:
+    post:
+      tags:
+        - Webhooks
+      summary: Process payment webhook
+      description: Webhook endpoint for payment gateways (Telebirr, Chapa)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        200:
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  # ============================================================
+  # ADMIN
+  # ============================================================
+  /admin/dashboard:
+    get:
+      tags:
+        - Admin
+      summary: Get admin dashboard
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Dashboard statistics retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          users:
+                            type: object
+                          providers:
+                            type: object
+                          bookings:
+                            type: object
+                          revenue:
+                            type: object
+                          disputes:
+                            type: object
+
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: Get all users
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [CUSTOMER, PROVIDER, ADMIN]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Users retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+
+  /admin/providers/pending:
+    get:
+      tags:
+        - Admin
+      summary: Get pending providers
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Pending providers retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Provider'
+
+  /admin/providers/{id}/verify:
+    patch:
+      tags:
+        - Admin
+      summary: Verify or reject provider
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [APPROVED, REJECTED]
+                notes:
+                  type: string
+      responses:
+        200:
+          description: Provider verification updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Provider'
+
+  /admin/disputes:
+    get:
+      tags:
+        - Admin
+      summary: Get all disputes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [OPEN, UNDER_REVIEW, RESOLVED, CLOSED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Disputes retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Dispute'
+
+  /admin/settings:
+    get:
+      tags:
+        - Admin
+      summary: Get system settings
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Settings retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+
+  /admin/audit-logs:
+    get:
+      tags:
+        - Admin
+      summary: Get audit logs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: userId
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: entity
+          in: query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Audit logs retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+
+  # ============================================================
+  # SEARCH
+  # ============================================================
+  /search/autocomplete:
+    get:
+      tags:
+        - Search
+      summary: Get autocomplete suggestions
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Suggestions retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            name:
+                              type: string
+                            category:
+                              type: string
+
+  /search/popular:
+    get:
+      tags:
+        - Search
+      summary: Get popular searches
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Popular searches retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: string
+
+  # ============================================================
+  # ANALYTICS
+  # ============================================================
+  /analytics/dashboard:
+    get:
+      tags:
+        - Analytics
+      summary: Get analytics dashboard
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [today, week, month, quarter, year]
+            default: month
+      responses:
+        200:
+          description: Analytics dashboard retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          bookingAnalytics:
+                            type: object
+                          revenueAnalytics:
+                            type: object
+                          userAnalytics:
+                            type: object
+                          providerAnalytics:
+                            type: object
+
+  # ============================================================
+  # WEBHOOKS
+  # ============================================================
+  /webhooks/health:
+    get:
+      tags:
+        - Webhooks
+      summary: Webhook health check
+      responses:
+        200:
+          description: Webhook endpoints are healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /webhooks/test:
+    post:
+      tags:
+        - Webhooks
+      summary: Test webhook endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - targetUrl
+              properties:
+                targetUrl:
+                  type: string
+                event:
+                  type: string
+                payload:
+                  type: object
+      responses:
+        200:
+          description: Test webhook sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  # ============================================================
+  # HEALTH
+  # ============================================================
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the API is running and healthy
+      responses:
+        200:
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: Local Service Provider Marketplace API
+                  version:
+                    type: string
+                    example: 1.0.0
+                  timestamp:
+                    type: string
+                    format: date-time
