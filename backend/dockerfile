@@ -1,0 +1,56 @@
+# ============================================================
+# STAGE 1: BUILD
+# ============================================================
+
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files and install dependencies
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy source code and Prisma files
+COPY . .
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build the application
+RUN npm run build
+
+# ============================================================
+# STAGE 2: PRODUCTION
+# ============================================================
+
+FROM node:18-alpine AS production
+
+WORKDIR /app
+
+# Install tini for graceful process handling
+RUN apk add --no-cache tini
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy built application from builder stage
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 5000
+
+# Set environment variables
+ENV NODE_ENV=production
+
+# Entry point with graceful shutdown handling
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Start the application
+CMD ["node", "dist/index.js"]
