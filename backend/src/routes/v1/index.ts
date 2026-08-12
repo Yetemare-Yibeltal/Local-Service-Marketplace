@@ -25,7 +25,6 @@ import {
 } from "../../middlewares/error.middleware";
 import { standardRateLimiter } from "../../config/rateLimit";
 import { corsOptions } from "../../config/cors";
-import { morganStream } from "../../config/logger";
 import logger from "../../utils/logger";
 
 // ============================================================
@@ -106,6 +105,12 @@ v1Router.use("/auth", authRoutes);
 // Webhook routes (public - must be accessible without auth)
 v1Router.use("/webhooks", webhookRoutes);
 
+// Category routes (public endpoints)
+v1Router.use("/categories", categoryRoutes);
+
+// Search routes (public endpoints)
+v1Router.use("/search", searchRoutes);
+
 // ============================================================
 // PROTECTED ROUTES (Authentication required)
 // ============================================================
@@ -127,12 +132,6 @@ v1Router.use("/admin", adminRoutes);
 
 // Review routes
 v1Router.use("/reviews", reviewRoutes);
-
-// Category routes (some endpoints are public, auth applied inside)
-v1Router.use("/categories", categoryRoutes);
-
-// Search routes (some endpoints are public, auth applied inside)
-v1Router.use("/search", searchRoutes);
 
 // Notification routes
 v1Router.use("/notifications", notificationRoutes);
