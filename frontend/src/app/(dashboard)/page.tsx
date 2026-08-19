@@ -391,7 +391,7 @@ function BarChart({
   const barWidth = Math.min(24, (data.length > 0 ? 320 / data.length : 24));
 
   return (
-    <div className="w-full" style={{ height }}>
+   
       <svg width="100%" height={height} viewBox={`0 0 ${Math.max(320, data.length * 30)} ${height}`}>
         {data.map((item, index) => {
           const x = index * (barWidth + 4) + 8;
