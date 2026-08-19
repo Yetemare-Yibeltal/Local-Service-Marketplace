@@ -353,8 +353,7 @@ async function getUnreadCount(): Promise<{ total: number }> {
     return { total: 0 };
   }
 }
-
-async function getFavoriteProviders(): Promise<FavoriteProvider[]> {
+{
   try {
     return await fetchWithAuth(`/providers/favorites`);
   } catch (error) {
