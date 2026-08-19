@@ -501,7 +501,7 @@ function DonutChart({
         })}
         <circle cx={size / 2} cy={size / 2} r={radius * 0.5} fill="white" />
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div>
         <span className="text-sm font-bold text-gray-900">{total}</span>
       </div>
     </div>
