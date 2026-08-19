@@ -1391,7 +1391,7 @@ export default function DashboardPage() {
                     </h3>
                     <p className="text-sm text-gray-500">{providerProfile.category}</p>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${providerProfile.isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      <span isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {providerProfile.isAvailable ? 'Available' : 'Unavailable'}
                       </span>
                       {providerProfile.isVerified && (
@@ -1440,7 +1440,8 @@ export default function DashboardPage() {
             {isCustomer && (
               <div className="bg-white rounded-xl shadow-card p-6">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="w-6 h-6 text-blue-600" />
+                  <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <UserIcon className="w-6 h-6 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-gray-900">Account Overview</h3>
@@ -1469,7 +1470,8 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <Link
-                  
+                  href="/dashboard/customer/profile"
+                  className="mt-3 block text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
                   Edit Profile →
                 </Link>
