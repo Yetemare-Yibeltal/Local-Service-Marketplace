@@ -1440,8 +1440,7 @@ export default function DashboardPage() {
             {isCustomer && (
               <div className="bg-white rounded-xl shadow-card p-6">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <UserIcon className="w-6 h-6 text-blue-600" />
+                  <div className="w-6 h-6 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-gray-900">Account Overview</h3>
