@@ -109,49 +109,6 @@ interface Booking {
     phone: string;
     profileImage: string | null;
   };
-  provider?: {
-    id: string;
-    userId: string;
-    businessName: string;
-    businessLogo: string | null;
-    category: string;
-  };
-  service?: {
-    id: string;
-    title: string;
-    description: string;
-    price: number;
-    priceType: string;
-  } | null;
-}
-
-interface Service {
-  id: string;
-  providerId: string;
-  title: string;
-  description: string;
-  priceType: 'FIXED' | 'HOURLY';
-  price: number;
-  discountPrice: number | null;
-  estimatedDurationMinutes: number | null;
-  isActive: boolean;
-  category: string;
-  images: string[];
-  bookingsCount: number;
-  revenue: number;
-}
-
-interface Notification {
-  id: string;
-  userId: string;
-  type: 'EMAIL' | 'SMS' | 'PUSH';
-  title: string;
-  message: string;
-  data: any;
-  status: 'PENDING' | 'SENT' | 'FAILED';
-  readAt: string | null;
-  createdAt: string;
-}
 
 interface ProviderProfile {
   id: string;
