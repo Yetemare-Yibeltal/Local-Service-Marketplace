@@ -672,7 +672,7 @@ function BookingCard({ booking, role }: { booking: Booking; role: string }) {
               {statusLabels[booking.status] || booking.status}
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+          <div >
             <span className="text-xs text-gray-400 flex items-center gap-1">
               <CalendarIcon className="w-3 h-3" />
               {formattedDate} at {formattedTime}
@@ -1391,7 +1391,7 @@ export default function DashboardPage() {
                     </h3>
                     <p className="text-sm text-gray-500">{providerProfile.category}</p>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <span isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${providerProfile.isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {providerProfile.isAvailable ? 'Available' : 'Unavailable'}
                       </span>
                       {providerProfile.isVerified && (
