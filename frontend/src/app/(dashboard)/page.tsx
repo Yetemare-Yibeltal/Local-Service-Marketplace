@@ -533,16 +533,7 @@ function StatsCard({
   onClick?: () => void;
 }) {
   const colorClasses = {
-    blue: 'bg-blue-50 text-blue-600 group-hover:bg-blue-100',
-    green: 'bg-green-50 text-green-600 group-hover:bg-green-100',
-    yellow: 'bg-yellow-50 text-yellow-600 group-hover:bg-yellow-100',
-    purple: 'bg-purple-50 text-purple-600 group-hover:bg-purple-100',
-    red: 'bg-red-50 text-red-600 group-hover:bg-red-100',
-    indigo: 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100',
-    pink: 'bg-pink-50 text-pink-600 group-hover:bg-pink-100',
-    teal: 'bg-teal-50 text-teal-600 group-hover:bg-teal-100',
-  };
-
+    blue: 
   const borderColors = {
     blue: 'border-blue-200',
     green: 'border-green-200',
