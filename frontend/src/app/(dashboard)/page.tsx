@@ -448,9 +448,7 @@ function BarChart({
 function DonutChart({
   data,
   size = 100,
-  colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
-}: {
-  data: { label: string; value: number }[];
+  colors = string; value: number }[];
   size?: number;
   colors?: string[];
 }) {
