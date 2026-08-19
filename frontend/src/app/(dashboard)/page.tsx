@@ -234,10 +234,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
   if (response.status === 401) {
     localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-    throw new Error('Session expired');
+    localStorage.removeItem
   }
 
   if (!response.ok) {
