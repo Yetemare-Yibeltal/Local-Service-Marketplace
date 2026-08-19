@@ -1470,8 +1470,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <Link
-                  href="/dashboard/customer/profile"
-                  className="mt-3 block text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  
                 >
                   Edit Profile →
                 </Link>
