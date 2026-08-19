@@ -597,7 +597,7 @@ function BookingCard({ booking, role }: { booking: Booking; role: string }) {
     DISPUTED: 'bg-orange-50 text-orange-800 border-orange-200',
   };
 
-  const statusIcons: Record<string, React.ReactNode> = {
+  const statusIcons: = {
     PENDING: <ClockIcon className="w-3 h-3" />,
     CONFIRMED: <CheckCircleIcon className="w-3 h-3" />,
     IN_PROGRESS: <ArrowPathIcon className="w-3 h-3" />,
