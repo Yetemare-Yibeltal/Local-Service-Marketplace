@@ -382,47 +382,7 @@ function BarChart({
 /**
  * Donut Chart Component (Pure SVG)
  */
-function DonutChart({
-  data,
-  size = 100,
-  colors = string; value: number }[];
-  size?: number;
-  colors?: string[];
-}) {
-  const total = data.reduce((sum, d) => sum + d.value, 0);
-  if (total === 0) return <div className="text-center text-gray-400 text-sm">No data</div>;
 
-  const radius = size / 2 - 10;
-  const circumference = 2 * Math.PI * radius;
-
-  let cumulativeAngle = 0;
-
-  return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {data.map((item, index) => {
-          const percentage = item.value / total;
-          const angle = percentage * 360;
-          const startAngle
-          return (
-            <path
-              key={index}
-              d={path}
-              fill={colors[index % colors.length]}
-              className="transition-all duration-300 hover:opacity-80"
-            >
-              <title>{item.label}: {item.value} ({percentage.toFixed(1)}%)</title>
-            </path>
-          );
-        })}
-        <circle cx={size / 2} cy={size / 2} r={radius * 0.5} fill="white" />
-      </svg>
-      <div>
-        <span className="text-sm font-bold text-gray-900">{total}</span>
-      </div>
-    </div>
-  );
-}
 
 // ============================================================
 // COMPONENTS
