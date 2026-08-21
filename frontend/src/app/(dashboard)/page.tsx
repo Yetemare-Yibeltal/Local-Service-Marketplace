@@ -230,18 +230,7 @@ function getDefaultStats(role: string): DashboardStats {
   };
 }
 
-async function getUpcomingBookings(userId: string, role: string): Promise<Booking[]> {
-  try {
-    if (role === 'PROVIDER') {
-      return await fetchWithAuth(`/bookings/provider?status=PENDING&limit=5`);
-    } else {
-      return await fetchWithAuth(`/bookings/customer?status=CONFIRMED&limit=5`);
-    }
-  } catch (error) {
-    console.error('Error fetching upcoming bookings:', error);
-    return [];
-  }
-}
+
 
 async function getRecentBookings(userId: string, role: string): Promise<Booking[]> {
   try {
