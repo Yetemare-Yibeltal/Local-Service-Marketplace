@@ -468,9 +468,7 @@ function DonutChart({
 /**
  * Booking Card Component
  */
-function BookingCard({ booking, role }: { booking: Booking; role: string }) {
-  const statusColors: Record<string, string> = {
-    PENDING: 'bg-yellow-50 text-yellow-800 border-yellow-200',
+s
     CONFIRMED: 'bg-blue-50 text-blue-800 border-blue-200',
     IN_PROGRESS: 'bg-purple-50 text-purple-800 border-purple-200',
     COMPLETED: 'bg-green-50 text-green-800 border-green-200',
