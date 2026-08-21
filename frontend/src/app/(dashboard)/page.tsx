@@ -636,8 +636,7 @@ function NotificationItem({ notification }: { notification: Notification }) {
  
   } else if 
 
-  return (
-    <div className={`p-3 rounded-lg transition-colors ${!isRead ? 'bg-blue-50 border border-blue-100' : 'bg-white hover:bg-gray-50'}`}>
+
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-0.5">
           {!isRead && <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>}
