@@ -413,16 +413,7 @@ function DonutChart({
           const x1 = size / 2 + radius * Math.cos(startRad);
           const y1 = size / 2 + radius * Math.sin(startRad);
           const x2 = size / 2 + radius * Math.cos(endRad);
-          const y2 = size / 2 + radius * Math.sin(endRad);
-          const largeArcFlag = angle > 180 ? 1 : 0;
-
-          const path = `
-            M ${size / 2} ${size / 2}
-            L ${x1} ${y1}
-            A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}
-            Z
-          `;
-
+  
           return (
             <path
               key={index}
