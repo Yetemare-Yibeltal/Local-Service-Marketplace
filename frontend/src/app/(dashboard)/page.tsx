@@ -202,33 +202,7 @@ async function getDashboardStats(userId: string, role: string): Promise<Dashboar
   }
 }
 
-function getDefaultStats(role: string): DashboardStats {
-  return {
-    totalBookings: 0,
-    pendingBookings: 0,
-    confirmedBookings: 0,
-    inProgressBookings: 0,
-    completedBookings: 0,
-    cancelledBookings: 0,
-    disputedBookings: 0,
-    totalEarnings: 0,
-    monthlyEarnings: 0,
-    weeklyBookings: 0,
-    completionRate: 0,
-    averageRating: 0,
-    totalReviews: 0,
-    totalSpent: 0,
-    weeklyGrowth: 0,
-    monthlyGrowth: 0,
-    bookingTrend: [],
-    earningsTrend: [],
-    categoryBreakdown: [],
-    peakHours: [],
-    responseTimeAvg: null,
-    topServices: [],
-    customerSegment: [],
-  };
-}
+
 
 
 
