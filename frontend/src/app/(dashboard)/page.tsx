@@ -468,13 +468,6 @@ function DonutChart({
 /**
  * Booking Card Component
  */
-s
-    CONFIRMED: 'bg-blue-50 text-blue-800 border-blue-200',
-    IN_PROGRESS: 'bg-purple-50 text-purple-800 border-purple-200',
-    COMPLETED: 'bg-green-50 text-green-800 border-green-200',
-    CANCELLED: 'bg-red-50 text-red-800 border-red-200',
-    DISPUTED: 'bg-orange-50 text-orange-800 border-orange-200',
-  };
 
   const statusIcons: = {
     PENDING: <ClockIcon className="w-3 h-3" />,
