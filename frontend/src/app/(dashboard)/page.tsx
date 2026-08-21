@@ -553,10 +553,18 @@ function BookingCard({ booking, role }: { booking: Booking; role: string }) {
     minute: '2-digit',
   });
 
- 
-  
+  const displayName = role === 'PROVIDER'
+    ? booking.customer?.fullName || 'Customer'
+    : booking.provider?.businessName || 'Provider';
 
- 
+  const displayImage = role === 'PROVIDER'
+    ? booking.customer?.profileImage
+    : booking.provider?.businessLogo;
+
+  const isCustomer = role === 'CUSTOMER';
+
+  const handleView = () => {
+    router.push(`/dashboard/bookings/${booking.bookingNumber}`);
   };
 
   return (
@@ -632,8 +640,23 @@ function NotificationItem({ notification }: { notification: Notification }) {
     }
   };
 
- 'Just now';
- 
+  const timeAgo = new Date(notification.createdAt);
+  const now = new Date();
+  const diffMinutes = Math.floor((now.getTime() - timeAgo.getTime()) / 60000);
+  let timeDisplay = 'Just now';
+  if (diffMinutes > 60) {
+    const hours = Math.floor(diffMinutes / 60);
+    timeDisplay = hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  } else if (diffMinutes > 0) {
+    timeDisplay = diffMinutes === 1 ? '1 minute ago' : `${diffMinutes} minutes ago`;
+  }
+
+  return (
+    <div className={`p-3 rounded-lg transition-colors ${!isRead ? 'bg-blue-50 border border-blue-100' : 'bg-white hover:bg-gray-50'}`}>
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 mt-0.5">
+          {!isRead && <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>}
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <p className={`text-sm ${!isRead ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
