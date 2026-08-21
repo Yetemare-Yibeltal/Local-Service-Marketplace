@@ -633,9 +633,7 @@ function NotificationItem({ notification }: { notification: Notification }) {
   };
 
  'Just now';
-  if (diffMinutes > 60) {
-    const hours = Math.floor(diffMinutes / 60);
-    timeDisplay = hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+ 
   } else if (diffMinutes > 0) {
     timeDisplay = diffMinutes === 1 ? '1 minute ago' : `${diffMinutes} minutes ago`;
   }
