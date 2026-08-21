@@ -556,10 +556,7 @@ function BookingCard({ booking, role }: { booking: Booking; role: string }) {
  
   
 
-  const isCustomer = role === 'CUSTOMER';
-
-  const handleView = () => {
-    router.push(`/dashboard/bookings/${booking.bookingNumber}`);
+ 
   };
 
   return (
