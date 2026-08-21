@@ -634,13 +634,6 @@ function NotificationItem({ notification }: { notification: Notification }) {
 
  'Just now';
  
-  } else if 
-
-
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 mt-0.5">
-          {!isRead && <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>}
-        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <p className={`text-sm ${!isRead ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
