@@ -322,62 +322,7 @@ function BarChart({
   valueKey?: string;
   maxValue?: number;
 }) {
-  const maxVal = maxValue || Math.max(...data.map((d) => d[valueKey]), 1);
-  const padding = { top: 10, bottom: 20, left: 5, right: 5 };
-  const chartHeight = height - padding.top - padding.bottom;
-  const barWidth = Math.min(24, (data.length > 0 ? 320 / data.length : 24));
 
-  return (
-   
-      <svg width="100%" height={height} viewBox={`0 0 ${Math.max(320, data.length * 30)} ${height}`}>
-        {data.map((item, index) => {
-          const x = index * (barWidth + 4) + 8;
-          const value = item[valueKey] || 0;
-          const barHeight = maxVal > 0 ? (value / maxVal) * chartHeight : 0;
-          const y = padding.top + chartHeight - barHeight;
-
-          return (
-            <g key={index}>
-              <rect
-                x={x}
-                y={y}
-                width={barWidth}
-                height={barHeight}
-                fill={barColor}
-                rx={2}
-                className="transition-all duration-500 hover:opacity-80"
-              >
-                <title>{item[labelKey]}: {value}</title>
-              </rect>
-              <text
-                x={x + barWidth / 2}
-                y={padding.top + chartHeight + 14}
-                fontSize="8"
-                fill="#9ca3af"
-                textAnchor="middle"
-                className="select-none"
-              >
-                {item[labelKey]?.slice(0, 3) || ''}
-              </text>
-              {value > 0 && (
-                <text
-                  x={x + barWidth / 2}
-                  y={y - 4}
-                  fontSize="7"
-                  fill="#6b7280"
-                  textAnchor="middle"
-                  className="select-none"
-                >
-                  {value}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
 
 /**
  * Donut Chart Component (Pure SVG)
