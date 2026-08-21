@@ -553,10 +553,7 @@ function BookingCard({ booking, role }: { booking: Booking; role: string }) {
     minute: '2-digit',
   });
 
-  const displayName = role === 'PROVIDER'
-    ? booking.customer?.fullName || 'Customer'
-    : booking.provider?.businessName || 'Provider';
-
+ 
   const displayImage = role === 'PROVIDER'
     ? booking.customer?.profileImage
     : booking.provider?.businessLogo;
