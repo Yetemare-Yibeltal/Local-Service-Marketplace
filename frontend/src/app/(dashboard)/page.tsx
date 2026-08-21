@@ -450,24 +450,6 @@ function DonutChart({
 /**
  * Stats Card Component
  */
-  const colorClasses = {
-    blue: 
-  const borderColors = {
-    blue: 'border-blue-200',
-    green: 'border-green-200',
-    yellow: 'border-yellow-200',
-    purple: 'border-purple-200',
-    red: 'border-red-200',
-    indigo: 'border-indigo-200',
-    pink: 'border-pink-200',
-    teal: 'border-teal-200',
-  };
-
-  return (
-    <div
-      onClick={onClick}
-      className={`bg-white rounded-xl shadow-card p-6 hover:shadow-lg transition-all duration-200 ${onClick ? 'cursor-pointer hover:-translate-y-0.5' : ''} border border-gray-50 group`}
-    >
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500 font-medium">{title}</p>
