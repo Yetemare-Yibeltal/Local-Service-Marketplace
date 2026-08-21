@@ -554,9 +554,7 @@ function BookingCard({ booking, role }: { booking: Booking; role: string }) {
   });
 
  
-  const displayImage = role === 'PROVIDER'
-    ? booking.customer?.profileImage
-    : booking.provider?.businessLogo;
+  
 
   const isCustomer = role === 'CUSTOMER';
 
