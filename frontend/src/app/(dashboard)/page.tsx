@@ -449,12 +449,7 @@ function DonutChart({
 
 /**
  * Stats Card Component
- */
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-gray-500 font-medium">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-          {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+ */5">{subtitle}</p>}
         </div>
         <div className={`p-2.5 rounded-lg transition-colors ${colorClasses[color]}`}>{icon}</div>
       </div>
