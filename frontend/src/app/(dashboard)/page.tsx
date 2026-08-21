@@ -274,31 +274,8 @@ async function getProviderProfile(): Promise<ProviderProfile | null> {
   }
 }
 
-async function getNotifications(): Promise<Notification[]> {
-  try {
-    return await fetchWithAuth(`/notifications?limit=5`);
-  } catch (error) {
-    console.error('Error fetching notifications:', error);
-    return [];
-  }
-}
-
-async function getUnreadCount(): Promise<{ total: number }> {
-  try {
-    return await fetchWithAuth(`/notifications/unread-count`);
-  } catch (error) {
-    console.error('Error fetching unread count:', error);
-    return { total: 0 };
-  }
-}
-{
-  try {
-    return await fetchWithAuth(`/providers/favorites`);
-  } catch (error) {
-    console.error('Error fetching favorite providers:', error);
-    return [];
-  }
-}
+async function getNotifications(): Promise<Notification[]> 
+  
 
 // ============================================================
 // CHART COMPONENTS (Pure SVG)
