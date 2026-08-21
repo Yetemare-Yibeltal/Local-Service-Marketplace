@@ -403,17 +403,7 @@ function DonutChart({
         {data.map((item, index) => {
           const percentage = item.value / total;
           const angle = percentage * 360;
-          const startAngle = cumulativeAngle;
-          const endAngle = cumulativeAngle + angle;
-          cumulativeAngle = endAngle;
-
-          // Calculate SVG arc path
-          const startRad = (startAngle - 90) * Math.PI / 180;
-          const endRad = (endAngle - 90) * Math.PI / 180;
-          const x1 = size / 2 + radius * Math.cos(startRad);
-          const y1 = size / 2 + radius * Math.sin(startRad);
-          const x2 = size / 2 + radius * Math.cos(endRad);
-  
+          const startAngle
           return (
             <path
               key={index}
