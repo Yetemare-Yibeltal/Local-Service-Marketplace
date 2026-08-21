@@ -450,23 +450,6 @@ function DonutChart({
 /**
  * Stats Card Component
  */
-function StatsCard({
-  title,
-  value,
-  subtitle,
-  icon,
-  color = 'blue',
-  trend,
-  onClick,
-}: {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon: React.ReactNode;
-  color?: 'blue' | 'green' | 'yellow' | 'purple' | 'red' | 'indigo' | 'pink' | 'teal';
-  trend?: { value: number; positive: boolean };
-  onClick?: () => void;
-}) {
   const colorClasses = {
     blue: 
   const borderColors = {
