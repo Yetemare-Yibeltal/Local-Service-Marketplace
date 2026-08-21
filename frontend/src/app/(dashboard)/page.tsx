@@ -632,10 +632,7 @@ function NotificationItem({ notification }: { notification: Notification }) {
     }
   };
 
-  const timeAgo = new Date(notification.createdAt);
-  const now = new Date();
-  const diffMinutes = Math.floor((now.getTime() - timeAgo.getTime()) / 60000);
-  let timeDisplay = 'Just now';
+ 'Just now';
   if (diffMinutes > 60) {
     const hours = Math.floor(diffMinutes / 60);
     timeDisplay = hours === 1 ? '1 hour ago' : `${hours} hours ago`;
