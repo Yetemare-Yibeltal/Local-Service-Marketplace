@@ -634,9 +634,7 @@ function NotificationItem({ notification }: { notification: Notification }) {
 
  'Just now';
  
-  } else if (diffMinutes > 0) {
-    timeDisplay = diffMinutes === 1 ? '1 minute ago' : `${diffMinutes} minutes ago`;
-  }
+  } else if 
 
   return (
     <div className={`p-3 rounded-lg transition-colors ${!isRead ? 'bg-blue-50 border border-blue-100' : 'bg-white hover:bg-gray-50'}`}>
