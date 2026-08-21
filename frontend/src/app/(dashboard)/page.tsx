@@ -449,12 +449,7 @@ function DonutChart({
 
 /**
  * Stats Card Component
- */5">{subtitle}</p>}
-        </div>
-        <div className={`p-2.5 rounded-lg transition-colors ${colorClasses[color]}`}>{icon}</div>
-      </div>
-      {trend && (
-        <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
+  <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
           {trend.positive ? (
             <ArrowUpRightIcon className="w-4 h-4 text-green-500" />
           ) : (
